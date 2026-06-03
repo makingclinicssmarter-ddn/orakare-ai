@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── CLINIC ───────────────────────────────────────────────────────────────────
+
+model Clinic {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctors  Doctor[]
+  patients Patient[]
+}
+
+// ─── DOCTOR ───────────────────────────────────────────────────────────────────
+
+model Doctor {
+  id           String   @id @default(cuid())
+  clinicId     String
+  name         String
+  email        String   @unique
+  phone        String?
+  qualification String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  visits           Visit[]
+  auditLogs        AuditLog[]
+}
+
+// ─── PATIENT ──────────────────────────────────────────────────────────────────
+
+model Patient {
+  id        String   @id @default(cuid())
+  clinicId  String
+  name      String
+  age       Int
+  gender    String
+  mobile    String
+  abhaId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic    Clinic    @relation(fields: [clinicId], references: [id])
+  visits    Visit[]
+  followUps FollowUp[]
+}
+
+// ─── VISIT ────────────────────────────────────────────────────────────────────
+
+model Visit {
+  id        String      @id @default(cuid())
+  clinicId  String
+  patientId String
+  doctorId  String
+  status    VisitStatus @default(REGISTERED)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  doctor           Doctor            @relation(fields: [doctorId], references: [id])
+  medicalHistory   MedicalHistory?
+  examConsent      ExamConsent?
+  clinicalFindings ClinicalFindings?
+  diagnosis        Diagnosis?
+  treatmentPlan    TreatmentPlan?
+  clinicalRecord   ClinicalRecord?
+  communications   Communication[]
+  followUps        FollowUp[]
+}
+
+enum VisitStatus {
+  REGISTERED
+  HISTORY_TAKEN
+  EXAM_CONSENT_SIGNED
+  EXAMINATION_DONE
+  DIAGNOSIS_DONE
+  TREATMENT_PLANNED
+  TREATMENT_CONSENT_SIGNED
+  COMPLETED
+}
+
+// ─── MEDICAL HISTORY ──────────────────────────────────────────────────────────
+
+model MedicalHistory {
+  id             String   @id @default(cuid())
+  visitId        String   @unique
+  chiefComplaint String
+  allergies      Json     @default("[]")
+  conditions     Json     @default("[]")
+  medications    Json     @default("[]")
+  collectedBy    String
+  createdAt      DateTime @default(now())
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── EXAM CONSENT ─────────────────────────────────────────────────────────────
+
+model ExamConsent {
+  id          String   @id @default(cuid())
+  visitId     String   @unique
+  signedAt    DateTime @default(now())
+  signatureUrl String?
+  ipAddress   String?
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── CLINICAL FINDINGS ────────────────────────────────────────────────────────
+
+model ClinicalFindings {
+  id               String   @id @default(cuid())
+  visitId          String   @unique
+  toothFindings    Json     @default("[]")
+  aiSuggestions    Json     @default("[]")
+  clinicalNotes    String?
+  voiceTranscript  String?
+  images           Json     @default("[]")
+  examStartedAt    DateTime?
+  examCompletedAt  DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── DIAGNOSIS ────────────────────────────────────────────────────────────────
+
+model Diagnosis {
+  id          String   @id @default(cuid())
+  visitId     String   @unique
+  diagnoses   Json     @default("[]")
+  finalizedAt DateTime @default(now())
+  finalizedBy String
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── TREATMENT PLAN ───────────────────────────────────────────────────────────
+
+model TreatmentPlan {
+  id         String   @id @default(cuid())
+  visitId    String   @unique
+  approvedBy String
+  approvedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  visit          Visit           @relation(fields: [visitId], references: [id])
+  treatmentItems TreatmentItem[]
+}
+
+model TreatmentItem {
+  id              String          @id @default(cuid())
+  treatmentPlanId String
+  procedureName   String
+  toothRef        String?
+  urgency         TreatmentUrgency @default(PLANNED)
+  estimatedCost   Float?
+  estimatedSessions Int?
+  consentStatus   ConsentStatus   @default(PENDING)
+  consentSignedAt DateTime?
+  consentDocUrl   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  treatmentPlan TreatmentPlan @relation(fields: [treatmentPlanId], references: [id])
+  followUps     FollowUp[]
+}
+
+enum TreatmentUrgency {
+  URGENT
+  SOON
+  PLANNED
+  MONITOR
+}
+
+enum ConsentStatus {
+  PENDING
+  SIGNED
+  DECLINED
+}
+
+// ─── CLINICAL RECORD ──────────────────────────────────────────────────────────
+
+model ClinicalRecord {
+  id          String    @id @default(cuid())
+  visitId     String    @unique
+  generatedAt DateTime  @default(now())
+  lockedAt    DateTime?
+  lockedBy    String?
+  fhirBundle  Json?
+  pdfUrl      String?
+  editLog     Json      @default("[]")
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── FOLLOW UP ────────────────────────────────────────────────────────────────
+
+model FollowUp {
+  id              String       @id @default(cuid())
+  patientId       String
+  visitId         String
+  treatmentItemId String?
+  dueDate         DateTime
+  status          FollowUpStatus @default(PENDING)
+  reminderSentAt  DateTime?
+  confirmedAt     DateTime?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  patient       Patient        @relation(fields: [patientId], references: [id])
+  visit         Visit          @relation(fields: [visitId], references: [id])
+  treatmentItem TreatmentItem? @relation(fields: [treatmentItemId], references: [id])
+}
+
+enum FollowUpStatus {
+  PENDING
+  REMINDED
+  CONFIRMED
+  COMPLETED
+  OVERDUE
+}
+
+// ─── COMMUNICATION ────────────────────────────────────────────────────────────
+
+model Communication {
+  id        String            @id @default(cuid())
+  visitId   String
+  type      CommunicationType
+  channel   String
+  sentAt    DateTime          @default(now())
+  status    String
+  content   String?
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+enum CommunicationType {
+  VISIT_SUMMARY
+  TREATMENT_PLAN
+  FOLLOW_UP_REMINDER
+  RECALL
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  actorId    String
+  actorRole  String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  doctor Doctor? @relation(fields: [actorId], references: [id])
+}
