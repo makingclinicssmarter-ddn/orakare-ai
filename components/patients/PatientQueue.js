@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import RegisterPatientForm from './RegisterPatientForm'
 
 export default function PatientQueue({ patients }) {
   const [selected, setSelected] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const router = useRouter()
 
   const statusColors = {
     REGISTERED: 'bg-blue-100 text-blue-700',
@@ -29,14 +31,17 @@ export default function PatientQueue({ patients }) {
     COMPLETED: 'Completed',
   }
 
+  function goToPatient(id) {
+  router.push('/dashboard/patients/' + id)
+}
+
   return (
     <div className="flex gap-6 p-6 min-h-screen bg-gray-50">
 
-      {/* Left — Patient Queue */}
       <div className="flex-1">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-medium text-gray-900">Today's patients</h1>
+            <h1 className="text-xl font-medium text-gray-900">Today&apos;s patients</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
@@ -63,14 +68,14 @@ export default function PatientQueue({ patients }) {
           <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
             {patients.map((patient, index) => {
               const latestVisit = patient.visits[0]
-              const initials = patient.name.split(' ').map(n => n[0]).join('').toUpperCase()
+              const initials = patient.name.split(' ').map(function(n) { return n[0] }).join('').toUpperCase()
               const colors = ['bg-indigo-100 text-indigo-700', 'bg-teal-100 text-teal-700', 'bg-rose-100 text-rose-700', 'bg-amber-100 text-amber-700']
               const color = colors[index % colors.length]
 
               return (
                 <div
                   key={patient.id}
-                  onClick={() => setSelected(patient)}
+                  onClick={function() { goToPatient(patient.id) }}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition"
                 >
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium ${color}`}>
@@ -92,7 +97,6 @@ export default function PatientQueue({ patients }) {
         )}
       </div>
 
-      {/* Right — Register form or patient detail */}
       <div className="w-96">
         {showForm ? (
           <RegisterPatientForm onClose={() => setShowForm(false)} />
@@ -116,7 +120,6 @@ export default function PatientQueue({ patients }) {
         )}
       </div>
 
-      {/* Modal overlay for form */}
       {showForm && (
         <div
           className="fixed inset-0 bg-black bg-opacity-30 z-10"

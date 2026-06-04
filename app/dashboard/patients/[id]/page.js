@@ -4,12 +4,15 @@ import { auth } from '@clerk/nextjs/server'
 import { notFound } from 'next/navigation'
 import MedicalHistoryForm from '@/components/patients/MedicalHistoryForm'
 
-export default async function PatientDetailPage({ params }) {
+export default async function PatientDetailPage(props) {
   const { userId } = await auth()
-  const { id } = await params
+  const params = await props.params
+  const id = params.id
+
+  if (!id) notFound()
 
   const patient = await db.patient.findUnique({
-    where: { id },
+    where: { id: id },
     include: {
       visits: {
         orderBy: { createdAt: 'desc' },
