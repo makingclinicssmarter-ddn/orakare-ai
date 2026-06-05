@@ -64,6 +64,14 @@ export default async function ExaminationPage(props) {
   visitId={latestVisit?.id}
   existing={latestVisit?.clinicalFindings}
 />
+  <div className="mt-6">
+  <Link
+    href={`/dashboard/patients/${id}/treatment`}
+    className="block w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-medium text-center hover:bg-indigo-700 transition"
+  >
+    Proceed to treatment plan →
+  </Link>
+</div>  
     </div>
   )
 }
