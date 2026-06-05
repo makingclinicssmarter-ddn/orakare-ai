@@ -1,46 +1,36 @@
-import Link from 'next/link'
 import { db } from '@/lib/db'
 import { auth } from '@clerk/nextjs/server'
-import { notFound } from 'next/navigation'
-import MedicalHistoryForm from '@/components/patients/MedicalHistoryForm'
+import PatientQueue from '@/components/patients/PatientQueue'
 
-export default async function PatientDetailPage({ params }) {
+export default async function PatientsPage() {
   const { userId } = await auth()
-  const { id } = await params
 
-  const patient = await db.patient.findUnique({
-    where: { id },
+  const patients = await db.patient.findMany({
+    where: {
+      visits: {
+        some: {
+          createdAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+          },
+        },
+      },
+    },
     include: {
       visits: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        include: {
-          medicalHistory: true,
-        }
-      }
-    }
+        where: {
+          createdAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      },
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
   })
 
-  if (!patient) notFound()
-
-  const latestVisit = patient.visits[0]
-  const existingHistory = latestVisit?.medicalHistory
-
-  return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="mb-6">
-        <Link href="/dashboard/patients" className="text-sm text-gray-400 hover:text-gray-600">
-          ← Back to queue
-        </Link>
-        <h1 className="text-xl font-medium text-gray-900 mt-2">{patient.name}</h1>
-        <p className="text-sm text-gray-500">{patient.age}y · {patient.gender} · {patient.mobile}</p>
-      </div>
-
-      <MedicalHistoryForm
-        patient={patient}
-        visitId={latestVisit?.id}
-        existing={existingHistory}
-      />
-    </div>
-  )
+  return <PatientQueue patients={patients} />
 }

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { db } from '@/lib/db'
 import { auth } from '@clerk/nextjs/server'
 import { notFound } from 'next/navigation'
-import DentalChart from '@/components/patients/DentalChart'
+import ExaminationView from '@/components/patients/ExaminationView'
 
 export default async function ExaminationPage(props) {
   const { userId } = await auth()
@@ -49,23 +49,21 @@ export default async function ExaminationPage(props) {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <Link href={`/dashboard/patients/${id}`} className="text-sm text-gray-400 hover:text-gray-600">
-            ← Back to patient
-          </Link>
-          <h1 className="text-xl font-medium text-gray-900 mt-2">{patient.name}</h1>
-          <p className="text-sm text-gray-500">
-            {latestVisit?.medicalHistory?.chiefComplaint || 'No chief complaint recorded'}
-          </p>
-        </div>
+      <div className="mb-6">
+        <Link href={`/dashboard/patients/${id}`} className="text-sm text-gray-400 hover:text-gray-600">
+          ← Back to patient
+        </Link>
+        <h1 className="text-xl font-medium text-gray-900 mt-2">{patient.name}</h1>
+        <p className="text-sm text-gray-500">
+          {latestVisit?.medicalHistory?.chiefComplaint || 'No chief complaint recorded'}
+        </p>
       </div>
 
-      <DentalChart
-        patient={patient}
-        visitId={latestVisit?.id}
-        existing={latestVisit?.clinicalFindings}
-      />
+      <ExaminationView
+  patient={patient}
+  visitId={latestVisit?.id}
+  existing={latestVisit?.clinicalFindings}
+/>
     </div>
   )
 }

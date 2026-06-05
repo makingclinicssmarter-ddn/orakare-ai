@@ -16,23 +16,24 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Get or create clinic for this user
-    let clinic = await db.clinic.findFirst({
-      where: { doctors: { some: { email: userId } } }
+    let doctor = await db.doctor.findFirst({
+      where: { email: userId },
+      include: { clinic: true }
     })
 
-    if (!clinic) {
-      clinic = await db.clinic.create({
+    if (!doctor) {
+      const clinic = await db.clinic.create({
         data: {
           name: 'My Clinic',
-          doctors: {
-            create: {
-              name: 'Doctor',
-              email: userId,
-            }
-          }
+        }
+      })
+      doctor = await db.doctor.create({
+        data: {
+          name: 'Doctor',
+          email: userId,
+          clinicId: clinic.id,
         },
-        include: { doctors: true }
+        include: { clinic: true }
       })
     }
 
@@ -43,11 +44,11 @@ export async function POST(request) {
         gender,
         mobile,
         abhaId: abhaId || null,
-        clinicId: clinic.id,
+        clinicId: doctor.clinicId,
         visits: {
           create: {
-            clinicId: clinic.id,
-            doctorId: clinic.doctors[0].id,
+            clinicId: doctor.clinicId,
+            doctorId: doctor.id,
             status: 'REGISTERED',
           }
         }
