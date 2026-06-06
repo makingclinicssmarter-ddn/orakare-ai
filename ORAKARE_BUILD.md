@@ -32,6 +32,45 @@ When AI suggests a finding for a tooth already marked by the doctor, AI does NOT
 ### Why consolidated treatment consent (not per-procedure)
 For a clinic with 5-6 procedures per patient, individual signing per procedure is too slow. One consolidated consent page lists all procedures, patient signs once.
 
+## Insights from existing PMS (v2)
+
+The existing system (Google Sheets + Apps Script) reveals critical UX patterns
+her staff uses daily. These must be replicated for smooth migration.
+
+### UX patterns to replicate
+- **Live patient search** — searches name, phone, patient ID with instant dropdown
+- **Sitting billing bar** — real-time panel showing estimate, collected, today paid, balance due
+- **Treatment history panels** — medical/dental/personal history shown side by side before treatment
+- **Multi-treatment entry** — multiple treatments in one session (e.g. RCT + filling same visit)
+- **Revenue split preview** — live calculation when assigning consultant to treatment
+- **WhatsApp notifications** — Hindi + English messages for 5 scenarios (appointment, follow-up, check-in, review, overdue)
+- **Dashboard alerts** — low stock, expiring items, pending fees, overdue patients
+
+### Services list (use exactly)
+Free Dental Check-Up & X-Ray, Scaling & Polishing, Root Canal Treatment (RCT),
+Tooth Extraction, Composite Filling, Crown / Cap Placement, Dental Implant,
+Teeth Whitening, Braces / Orthodontic, Consultation, Other
+
+### ID format (preserve for migration)
+- Patients: ORK-001, ORK-002...
+- Treatments: ORK-001-T01, ORK-001-T02...
+- Sittings: ORK-001-T01-S1, S2, S3...
+
+### Two invoice types needed
+- Clinical invoice — auto-populated from treatments and sittings
+- Commercial invoice — manual entry for implants, lab work, prosthetics
+
+### Revised build priority
+1. Records view (patient history + treatments + sittings + balance)
+2. Treatments module (multi-treatment + consultant split)
+3. Sittings module (billing bar)
+4. WhatsApp notifications (Hindi + English)
+5. Invoice (clinical + commercial)
+6. Finance (with charts)
+7. Consultants + fee ledger
+8. Inventory
+9. Expenses
+
 ### Why FHIR-ready but not FHIR-native for MVP
 Full FHIR compliance requires HIU/HIP registration with NHA. Instead, data is stored in a structure that maps cleanly to FHIR R4 resources. When ABHA registration happens, it becomes a mapping exercise not a rewrite.
 
