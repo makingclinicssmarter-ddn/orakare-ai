@@ -59,6 +59,7 @@ model Patient {
   gender    String
   mobile    String
   abhaId    String?
+  originalID String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

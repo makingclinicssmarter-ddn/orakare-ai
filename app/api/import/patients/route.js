@@ -63,15 +63,16 @@ export async function POST(request) {
         const gender = p.gender || 'Unknown'
 
         await db.patient.create({
-          data: {
-            clinicId: doctor.clinicId,
-            name: p.name,
-            age,
-            gender,
-            mobile: p.mobile || '',
-            abhaId: null,
-          }
-        })
+  data: {
+    clinicId: doctor.clinicId,
+    name: p.name,
+    age,
+    gender,
+    mobile: p.mobile || '',
+    abhaId: null,
+    originalID: p.id || null,
+  }
+})
 
         imported++
       } catch (e) {
