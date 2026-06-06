@@ -14,7 +14,9 @@ export default function ExaminationView({ patient, visitId, existing }) {
   function handleFindingsConfirmed(confirmed) {
     const updated = { ...mergedToothFindings }
     confirmed.forEach(function(f) {
-      updated[f.tooth] = f.condition
+      if (!updated[f.tooth]) {
+        updated[f.tooth] = f.condition
+      }
     })
     setMergedToothFindings(updated)
     setChartKey(function(k) { return k + 1 })
@@ -37,6 +39,7 @@ export default function ExaminationView({ patient, visitId, existing }) {
         patient={patient}
         visitId={visitId}
         onFindingsConfirmed={handleFindingsConfirmed}
+        existingFindings={mergedToothFindings}
       />
     </div>
   )

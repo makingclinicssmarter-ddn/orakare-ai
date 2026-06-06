@@ -20,7 +20,7 @@ const CONFIDENCE_COLORS = {
   low: 'text-gray-400',
 }
 
-export default function AIFindings({ patient, visitId, onFindingsConfirmed }) {
+export default function AIFindings({ patient, visitId, onFindingsConfirmed, existingFindings = {} }) {
   const [image, setImage] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [clinicalNotes, setClinicalNotes] = useState('')
@@ -172,7 +172,7 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed }) {
                 onClick={handleConfirmAll}
                 className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
               >
-                Add {confirmedCount} to chart →
+                Add {confirmedCount} to chart
               </button>
             )}
           </div>
@@ -182,6 +182,9 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed }) {
               const decision = decisions[index] || 'pending'
               const condColor = CONDITION_COLORS[suggestion.condition] || 'bg-gray-100 border-gray-300 text-gray-600'
               const confColor = CONFIDENCE_COLORS[suggestion.confidence] || 'text-gray-400'
+              const doctorFinding = existingFindings[suggestion.tooth]
+              const hasConflict = doctorFinding && doctorFinding !== suggestion.condition
+              const hasMatch = doctorFinding && doctorFinding === suggestion.condition
 
               return (
                 <div
@@ -189,12 +192,13 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed }) {
                   className={'rounded-lg border p-3 transition ' + (
                     decision === 'confirmed' ? 'border-green-300 bg-green-50' :
                     decision === 'rejected' ? 'border-gray-200 bg-gray-50 opacity-50' :
+                    hasConflict ? 'border-amber-200 bg-amber-50' :
                     'border-gray-200 bg-white'
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className={'text-xs px-2 py-0.5 rounded-full border font-medium ' + condColor}>
                           Tooth {suggestion.tooth}
                         </span>
@@ -204,8 +208,23 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed }) {
                         <span className={'text-xs font-medium ' + confColor}>
                           {suggestion.confidence} confidence
                         </span>
+                        {hasConflict && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                            Doctor marked: {doctorFinding}
+                          </span>
+                        )}
+                        {hasMatch && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
+                            Matches doctor finding
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-gray-500">{suggestion.reasoning}</p>
+                      {hasConflict && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Confirming this will not overwrite your finding. Update the chart manually if needed.
+                        </p>
+                      )}
                     </div>
 
                     {decision === 'pending' && (
