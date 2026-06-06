@@ -14,24 +14,27 @@ export default function RegisterPatientForm({ onClose }) {
     abhaId: '',
   })
 
-  const handleSubmit = async () => {
+  function update(field, value) {
+    setForm(function(prev) { return { ...prev, [field]: value } })
+  }
+
+  async function handleSubmit() {
     if (!form.name || !form.age || !form.gender || !form.mobile) {
       alert('Please fill in name, age, gender and mobile')
       return
     }
-
     setLoading(true)
-
     try {
       const res = await fetch('/api/patients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-
       if (res.ok) {
+        const data = await res.json()
         router.refresh()
         onClose()
+        router.push('/dashboard/patients/' + data.patient.id)
       } else {
         alert('Something went wrong. Please try again.')
       }
@@ -43,76 +46,84 @@ export default function RegisterPatientForm({ onClose }) {
   }
 
   return (
-    <div className="relative bg-white rounded-xl border border-gray-200 p-5 z-20">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-medium text-gray-900">Register new patient</h2>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+    <div className="space-y-4">
+
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">
+          Full name <span className="text-red-400">*</span>
+        </label>
+        <input
+          type="text"
+          placeholder="Patient's full name"
+          value={form.name}
+          onChange={function(e) { update('name', e.target.value) }}
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+        />
       </div>
 
-      <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-500 mb-1 block">Full name *</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            Age <span className="text-red-400">*</span>
+          </label>
           <input
-            type="text"
-            placeholder="Patient's full name"
-            value={form.name}
-            onChange={e => setForm({ ...form, name: e.target.value })}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            type="number"
+            placeholder="Years"
+            value={form.age}
+            onChange={function(e) { update('age', e.target.value) }}
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
           />
         </div>
-
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="text-xs text-gray-500 mb-1 block">Age *</label>
-            <input
-              type="number"
-              placeholder="Age"
-              value={form.age}
-              onChange={e => setForm({ ...form, age: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="text-xs text-gray-500 mb-1 block">Gender *</label>
-            <select
-              value={form.gender}
-              onChange={e => setForm({ ...form, gender: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">Select</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-        </div>
-
         <div>
-          <label className="text-xs text-gray-500 mb-1 block">Mobile number *</label>
-          <input
-            type="tel"
-            placeholder="+91"
-            value={form.mobile}
-            onChange={e => setForm({ ...form, mobile: e.target.value })}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            Gender <span className="text-red-400">*</span>
+          </label>
+          <select
+            value={form.gender}
+            onChange={function(e) { update('gender', e.target.value) }}
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-white"
+          >
+            <option value="">Select</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
         </div>
+      </div>
 
-        <div>
-          <label className="text-xs text-gray-500 mb-1 block">ABHA ID <span className="text-gray-400">(optional)</span></label>
-          <input
-            type="text"
-            placeholder="14-digit ABHA ID"
-            value={form.abhaId}
-            onChange={e => setForm({ ...form, abhaId: e.target.value })}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">
+          Mobile number <span className="text-red-400">*</span>
+        </label>
+        <input
+          type="tel"
+          placeholder="+91 XXXXX XXXXX"
+          value={form.mobile}
+          onChange={function(e) { update('mobile', e.target.value) }}
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+        />
+      </div>
 
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">
+          ABHA ID
+          <span className="ml-1 text-gray-400 font-normal">(optional)</span>
+        </label>
+        <input
+          type="text"
+          placeholder="14-digit ABHA ID"
+          value={form.abhaId}
+          onChange={function(e) { update('abhaId', e.target.value) }}
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+        />
+        <p className="text-xs text-gray-400 mt-1">Can be added later — never blocks registration</p>
+      </div>
+
+      <div className="pt-2">
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 mt-2"
+          className="w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
         >
           {loading ? 'Registering...' : 'Register patient'}
         </button>
