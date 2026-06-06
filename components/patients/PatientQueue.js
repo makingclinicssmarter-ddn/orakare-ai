@@ -24,9 +24,51 @@ const AVATAR_COLORS = [
   'bg-cyan-100 text-cyan-700',
 ]
 
-export default function PatientQueue({ patients }) {
+function PatientRow({ patient, index, showStatus, onClick }) {
+  const visit = patient.visits[0]
+  const status = STATUS_CONFIG[visit?.status] || STATUS_CONFIG.REGISTERED
+  const initials = patient.name.split(' ').map(function(n) { return n[0] }).join('').toUpperCase().slice(0, 2)
+  const avatarColor = AVATAR_COLORS[index % AVATAR_COLORS.length]
+
+  return (
+    <div
+      onClick={onClick}
+      className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 transition border-b border-gray-50 last:border-0"
+    >
+      <div className={'w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 ' + avatarColor}>
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900">{patient.name}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{patient.age}y · {patient.gender} · {patient.mobile}</p>
+      </div>
+      {patient.abhaId && (
+        <span className="text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-600 border border-teal-100 flex-shrink-0">
+          ABHA
+        </span>
+      )}
+      {showStatus && visit && (
+        <span className={'text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ' + status.color}>
+          {status.label}
+        </span>
+      )}
+      {!showStatus && !visit && (
+        <span className="text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 bg-gray-100 text-gray-500 border border-gray-200">
+          No visits yet
+        </span>
+      )}
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </div>
+  )
+}
+
+export default function PatientQueue({ patients, allPatients, search }) {
   const router = useRouter()
   const [showForm, setShowForm] = useState(false)
+  const [activeTab, setActiveTab] = useState('today')
+  const [searchValue, setSearchValue] = useState(search || '')
 
   function goToPatient(id) {
     router.push('/dashboard/patients/' + id)
@@ -35,24 +77,27 @@ export default function PatientQueue({ patients }) {
   const waiting = patients.filter(function(p) {
     return p.visits[0]?.status !== 'COMPLETED'
   })
+
   const completed = patients.filter(function(p) {
     return p.visits[0]?.status === 'COMPLETED'
   })
 
+  const filteredPatients = searchValue
+    ? allPatients.filter(function(p) {
+        return p.name.toLowerCase().includes(searchValue.toLowerCase()) ||
+          (p.mobile && p.mobile.includes(searchValue))
+      })
+    : allPatients
+
   return (
     <div className="flex min-h-screen">
-
-      {/* Main content */}
       <div className="flex-1 p-6">
 
-        {/* Page header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Patient queue</h1>
+            <h1 className="text-xl font-semibold text-gray-900">Patients</h1>
             <p className="text-sm text-gray-400 mt-0.5">
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-              {' · '}
-              {patients.length} patient{patients.length !== 1 ? 's' : ''} today
             </p>
           </div>
           <button
@@ -67,109 +112,132 @@ export default function PatientQueue({ patients }) {
           </button>
         </div>
 
-        {/* Empty state */}
-        {patients.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-gray-700 mb-1">No patients today</p>
-            <p className="text-xs text-gray-400 mb-4">Register your first patient to get started</p>
-            <button
-              onClick={function() { setShowForm(true) }}
-              className="text-sm text-indigo-600 font-medium hover:underline"
-            >
-              Register a patient
-            </button>
-          </div>
-        )}
+        <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
+          <button
+            onClick={function() { setActiveTab('today') }}
+            className={'px-4 py-1.5 rounded-lg text-sm font-medium transition ' +
+              (activeTab === 'today' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}
+          >
+            Today
+            {patients.length > 0 && (
+              <span className="ml-1.5 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full">
+                {patients.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={function() { setActiveTab('all') }}
+            className={'px-4 py-1.5 rounded-lg text-sm font-medium transition ' +
+              (activeTab === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}
+          >
+            All patients
+          </button>
+        </div>
 
-        {/* Waiting patients */}
-        {waiting.length > 0 && (
-          <div className="mb-6">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-              In progress · {waiting.length}
-            </p>
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              {waiting.map(function(patient, index) {
-                const visit = patient.visits[0]
-                const status = STATUS_CONFIG[visit?.status] || STATUS_CONFIG.REGISTERED
-                const initials = patient.name.split(' ').map(function(n) { return n[0] }).join('').toUpperCase().slice(0, 2)
-                const avatarColor = AVATAR_COLORS[index % AVATAR_COLORS.length]
-
-                return (
-                  <div
-                    key={patient.id}
-                    onClick={function() { goToPatient(patient.id) }}
-                    className={'flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 transition ' +
-                      (index < waiting.length - 1 ? 'border-b border-gray-50' : '')}
-                  >
-                    <div className={'w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 ' + avatarColor}>
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{patient.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{patient.age}y · {patient.gender} · {patient.mobile}</p>
-                    </div>
-                    {patient.abhaId && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-600 border border-teal-100 flex-shrink-0">
-                        ABHA
-                      </span>
-                    )}
-                    <span className={'text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ' + status.color}>
-                      {status.label}
-                    </span>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-                      <polyline points="9 18 15 12 9 6"/>
-                    </svg>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Completed patients */}
-        {completed.length > 0 && (
+        {activeTab === 'today' && (
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-              Completed · {completed.length}
-            </p>
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm opacity-60">
-              {completed.map(function(patient, index) {
-                const initials = patient.name.split(' ').map(function(n) { return n[0] }).join('').toUpperCase().slice(0, 2)
-
-                return (
-                  <div
-                    key={patient.id}
-                    onClick={function() { goToPatient(patient.id) }}
-                    className={'flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 transition ' +
-                      (index < completed.length - 1 ? 'border-b border-gray-50' : '')}
-                  >
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 bg-gray-100 text-gray-500">
-                      {initials}
+            {patients.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-2xl border border-gray-100">
+                <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                </div>
+                <p className="text-sm font-medium text-gray-700 mb-1">No patients today</p>
+                <p className="text-xs text-gray-400 mb-4">Register a new patient or find an existing one in All patients</p>
+                <button
+                  onClick={function() { setShowForm(true) }}
+                  className="text-sm text-indigo-600 font-medium hover:underline"
+                >
+                  Register a patient
+                </button>
+              </div>
+            ) : (
+              <div>
+                {waiting.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
+                      In progress · {waiting.length}
+                    </p>
+                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+                      {waiting.map(function(patient, index) {
+                        return (
+                          <PatientRow
+                            key={patient.id}
+                            patient={patient}
+                            index={index}
+                            showStatus={true}
+                            onClick={function() { goToPatient(patient.id) }}
+                          />
+                        )
+                      })}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-700">{patient.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{patient.age}y · {patient.gender}</p>
-                    </div>
-                    <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-gray-100 text-gray-500 border border-gray-200">
-                      Completed
-                    </span>
                   </div>
-                )
-              })}
+                )}
+                {completed.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
+                      Completed · {completed.length}
+                    </p>
+                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm opacity-60">
+                      {completed.map(function(patient, index) {
+                        return (
+                          <PatientRow
+                            key={patient.id}
+                            patient={patient}
+                            index={index}
+                            showStatus={true}
+                            onClick={function() { goToPatient(patient.id) }}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'all' && (
+          <div>
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search by name or phone..."
+                value={searchValue}
+                onChange={function(e) { setSearchValue(e.target.value) }}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
+              />
             </div>
+
+            {filteredPatients.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-2xl border border-gray-100">
+                <p className="text-sm font-medium text-gray-700 mb-1">No patients found</p>
+                <p className="text-xs text-gray-400">Try a different search term</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+                {filteredPatients.map(function(patient, index) {
+                  return (
+                    <PatientRow
+                      key={patient.id}
+                      patient={patient}
+                      index={index}
+                      showStatus={false}
+                      onClick={function() { goToPatient(patient.id) }}
+                    />
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Registration form slide-in */}
       {showForm && (
         <>
           <div
