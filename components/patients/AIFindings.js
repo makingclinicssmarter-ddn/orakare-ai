@@ -11,6 +11,7 @@ const CONDITION_COLORS = {
   mobility: 'bg-orange-100 border-orange-400 text-orange-800',
   sensitivity: 'bg-purple-100 border-purple-400 text-purple-800',
   periapical: 'bg-rose-100 border-rose-400 text-rose-800',
+  erupting: 'bg-cyan-100 border-cyan-400 text-cyan-800',
   healthy: 'bg-green-100 border-green-400 text-green-800',
 }
 
@@ -20,9 +21,24 @@ const CONFIDENCE_COLORS = {
   low: 'text-gray-400',
 }
 
+const SEVERITY_COLORS = {
+  high: 'bg-red-50 text-red-700 border-red-200',
+  moderate: 'bg-amber-50 text-amber-700 border-amber-200',
+  low: 'bg-gray-50 text-gray-500 border-gray-200',
+}
+
+const IMAGE_TYPES = [
+  { value: 'intraoral_photo', label: 'Intraoral Photo' },
+  { value: 'opg', label: 'OPG / Panoramic X-Ray' },
+  { value: 'periapical', label: 'Periapical X-Ray' },
+  { value: 'bitewing', label: 'Bitewing X-Ray' },
+  { value: 'occlusal', label: 'Occlusal X-Ray' },
+]
+
 export default function AIFindings({ patient, visitId, onFindingsConfirmed, existingFindings = {} }) {
   const [image, setImage] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  const [imageType, setImageType] = useState('intraoral_photo')
   const [clinicalNotes, setClinicalNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [suggestions, setSuggestions] = useState([])
@@ -50,6 +66,7 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
       formData.append('image', image)
       formData.append('visitId', visitId)
       formData.append('clinicalNotes', clinicalNotes)
+      formData.append('imageType', imageType)
       const res = await fetch('/api/patients/' + patient.id + '/ai-analysis', {
         method: 'POST',
         body: formData,
@@ -105,6 +122,31 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
           </span>
         </div>
 
+        {/* Image type selector */}
+        <div className="mb-4">
+          <label className="text-xs text-gray-500 mb-1.5 block">
+            Image type <span className="text-gray-400">(optional — helps AI analyse correctly)</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {IMAGE_TYPES.map(function(type) {
+              return (
+                <button
+                  key={type.value}
+                  onClick={function() { setImageType(type.value) }}
+                  className={'text-xs px-3 py-1.5 rounded-lg border transition ' + (
+                    imageType === type.value
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                  )}
+                >
+                  {type.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Image upload */}
         <div className="mb-4">
           <label className="text-xs text-gray-500 mb-1 block">
             Upload intraoral photo or X-ray
@@ -127,9 +169,10 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
           </div>
         )}
 
+        {/* Clinical context */}
         <div className="mb-4">
           <label className="text-xs text-gray-500 mb-1 block">
-            Additional clinical context (optional)
+            Additional clinical context <span className="text-gray-400">(optional)</span>
           </label>
           <textarea
             value={clinicalNotes}
@@ -182,6 +225,7 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
               const decision = decisions[index] || 'pending'
               const condColor = CONDITION_COLORS[suggestion.condition] || 'bg-gray-100 border-gray-300 text-gray-600'
               const confColor = CONFIDENCE_COLORS[suggestion.confidence] || 'text-gray-400'
+              const sevColor = SEVERITY_COLORS[suggestion.severity] || SEVERITY_COLORS.low
               const doctorFinding = existingFindings[suggestion.tooth]
               const hasConflict = doctorFinding && doctorFinding !== suggestion.condition
               const hasMatch = doctorFinding && doctorFinding === suggestion.condition
@@ -198,7 +242,7 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <span className={'text-xs px-2 py-0.5 rounded-full border font-medium ' + condColor}>
                           Tooth {suggestion.tooth}
                         </span>
@@ -208,6 +252,11 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
                         <span className={'text-xs font-medium ' + confColor}>
                           {suggestion.confidence} confidence
                         </span>
+                        {suggestion.severity && (
+                          <span className={'text-xs px-2 py-0.5 rounded-full border font-medium ' + sevColor}>
+                            {suggestion.severity} severity
+                          </span>
+                        )}
                         {hasConflict && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                             Doctor marked: {doctorFinding}
@@ -219,7 +268,7 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">{suggestion.reasoning}</p>
+                      <p className="text-xs text-gray-500 leading-relaxed">{suggestion.reasoning}</p>
                       {hasConflict && (
                         <p className="text-xs text-amber-600 mt-1">
                           Confirming this will not overwrite your finding. Update the chart manually if needed.
