@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 
 export default function TreatmentConsent({ patient, visitId, items, onConsentComplete }) {
-  const router = useRouter()
   const canvasRef = useRef(null)
   const [drawing, setDrawing] = useState(false)
   const [signed, setSigned] = useState(false)
@@ -84,8 +82,11 @@ export default function TreatmentConsent({ patient, visitId, items, onConsentCom
 
       if (res.ok) {
         setShow(false)
-        if (onConsentComplete) onConsentComplete()
-        router.refresh()
+        if (onConsentComplete) {
+          onConsentComplete(signableItems.map(function(i) {
+            return { ...i, consentStatus: 'SIGNED' }
+          }))
+        }
       } else {
         alert('Something went wrong. Please try again.')
       }
@@ -121,7 +122,6 @@ export default function TreatmentConsent({ patient, visitId, items, onConsentCom
                 </button>
               </div>
 
-              {/* Patient and procedures */}
               <div className="bg-gray-50 rounded-xl p-4 mb-4">
                 <p className="text-sm font-medium text-gray-700 mb-3">
                   Patient: {patient.name}
@@ -159,7 +159,6 @@ export default function TreatmentConsent({ patient, visitId, items, onConsentCom
                 </div>
               </div>
 
-              {/* Consent statement */}
               <div className="text-xs text-gray-500 leading-relaxed mb-4">
                 I, <strong>{patient.name}</strong>, understand the nature of the procedures
                 listed above, the associated risks and benefits, and the estimated costs.
@@ -167,7 +166,6 @@ export default function TreatmentConsent({ patient, visitId, items, onConsentCom
                 satisfaction. I voluntarily consent to the treatment.
               </div>
 
-              {/* Physical form option */}
               <div className="flex items-center gap-2 mb-4">
                 <input
                   type="checkbox"
@@ -184,7 +182,6 @@ export default function TreatmentConsent({ patient, visitId, items, onConsentCom
                 </label>
               </div>
 
-              {/* Digital signature */}
               {!physicalForm && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-1">

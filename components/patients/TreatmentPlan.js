@@ -88,7 +88,6 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
           setItems(data.plan.treatmentItems)
         }
         setSaved(true)
-        router.refresh()
       } else {
         alert('Failed to save treatment plan. Please try again.')
       }
@@ -172,11 +171,9 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
       {hasItems && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium text-gray-700">
-              Treatment items
-            </h2>
+            <h2 className="text-sm font-medium text-gray-700">Treatment items</h2>
             <div className="text-sm font-medium text-indigo-600">
-              Total: Rs.{totalCost.toLocaleString('en-IN')}
+              Total: ₹{totalCost.toLocaleString('en-IN')}
             </div>
           </div>
 
@@ -223,7 +220,7 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
                           <option value="MONITOR">Monitor</option>
                         </select>
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-gray-400">Rs.</span>
+                          <span className="text-xs text-gray-400">₹</span>
                           <input
                             type="number"
                             value={item.estimatedCost}
@@ -335,7 +332,14 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
                 patient={patient}
                 visitId={visitId}
                 items={items}
-                onConsentComplete={function() { router.refresh() }}
+                onConsentComplete={function(signedItems) {
+                  setItems(function(prev) {
+                    return prev.map(function(item) {
+                      const match = signedItems.find(function(s) { return s.id === item.id })
+                      return match ? { ...item, consentStatus: 'SIGNED' } : item
+                    })
+                  })
+                }}
               />
             </div>
           )}
@@ -347,12 +351,12 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
                 <p className="text-xs text-green-600 mt-1">Treatment can now proceed. Generate clinical record next.</p>
               </div>
               
-               <a
-               href={'/dashboard/patients/' + patient.id + '/record'}
+                <button
+                onClick={function() { router.push('/dashboard/patients/' + patient.id + '/record') }}
                 className="block w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-medium text-center hover:bg-indigo-700 transition"
               >
                 Generate clinical record
-              </a>
+              </button>
             </div>
           )}
         </div>
