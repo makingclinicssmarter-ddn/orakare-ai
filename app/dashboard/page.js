@@ -99,17 +99,25 @@ export default async function DashboardPage() {
 
   const monthRevenue = monthSittings.reduce((s, x) => s + Number(x.paid || 0), 0)
   const monthExpTotal = monthExpenses.reduce((s, x) => s + Number(x.amount || 0), 0)
-  const totalBalance = allPatients.reduce((sum, p) => {
-    const est = p.visits.flatMap(v => v.treatmentPlan?.treatmentItems || []).reduce((s, t) => s + Number(t.estimatedCost || 0), 0)
-    return sum + est
-  }, 0)
+const allSittings = await db.sitting.findMany({
+    where: { clinicId },
+  })
 
+  const paidByPatient = {}
   const sittingsByPatient = {}
-  const allSittings = await db.sitting.findMany({ where: { clinicId } })
-  allSittings.forEach(s => {
+  allSittings.forEach(function(s) {
+    paidByPatient[s.patientId] = (paidByPatient[s.patientId] || 0) + Number(s.paid || 0)
     if (!sittingsByPatient[s.patientId]) sittingsByPatient[s.patientId] = []
     sittingsByPatient[s.patientId].push(s)
   })
+
+  const totalBalance = allPatients.reduce(function(sum, p) {
+    const est = p.visits.flatMap(function(v) {
+      return v.treatmentPlan?.treatmentItems || []
+    }).reduce(function(s, t) { return s + Number(t.estimatedCost || 0) }, 0)
+    const paid = paidByPatient[p.id] || 0
+    return sum + Math.max(0, est - paid)
+  }, 0)
 
   const overduePatients = []
   const seenPatientIds = new Set()
