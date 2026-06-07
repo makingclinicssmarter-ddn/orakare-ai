@@ -327,8 +327,8 @@ export default function DashboardView({
             { icon: '📅', label: 'Book appointment', bg: '#E1F5EE', href: '/dashboard/appointments' },
             { icon: '👤', label: 'New patient', bg: '#EEEDFE', href: '/dashboard/patients' },
             { icon: '💸', label: 'Add expense', bg: '#FAEEDA', href: '/dashboard/expenses' },
-            { icon: '🔁', label: 'Send follow up', bg: '#E6F1FB', action: handleFollowUp },
-            { icon: '⭐', label: 'Seek review', bg: '#FFF7ED', action: handleReview },
+            { icon: '🔁', label: 'Send follow up', bg: '#E6F1FB', href: '/dashboard/notifications' },
+{ icon: '⭐', label: 'Seek review', bg: '#FFF7ED', href: '/dashboard/notifications' },
           ].map(function(item) {
             const style = {
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
