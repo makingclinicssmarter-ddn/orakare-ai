@@ -12,6 +12,7 @@ export default function SittingForm({ patients }) {
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [selectedItem, setSelectedItem] = useState(null)
   const [collectedAmount, setCollectedAmount] = useState(0)
+  const [pastSittings, setPastSittings] = useState([])
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -227,9 +228,13 @@ export default function SittingForm({ patients }) {
                     onClick={function() {
   setSelectedItem(item)
   setCollectedAmount(0)
+  setPastSittings([])
   fetch('/api/sittings?treatmentItemId=' + item.id)
     .then(function(r) { return r.json() })
-    .then(function(data) { setCollectedAmount(data.totalPaid || 0) })
+    .then(function(data) {
+      setCollectedAmount(data.totalPaid || 0)
+      setPastSittings(data.sittings || [])
+    })
     .catch(function() {})
 }}
                     className={'flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition ' +
@@ -261,7 +266,43 @@ export default function SittingForm({ patients }) {
           )}
         </div>
       )}
-
+      {/* Past sittings history */}
+{selectedItem && pastSittings.length > 0 && (
+  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <h2 className="text-sm font-medium text-gray-700 mb-3">
+      Past sittings ({pastSittings.length})
+    </h2>
+    <div className="space-y-2">
+      {pastSittings.map(function(sitting, index) {
+        return (
+          <div key={sitting.id} className="border border-gray-100 rounded-xl p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-gray-500">
+                {new Date(sitting.date).toLocaleDateString('en-IN', {
+                  day: 'numeric', month: 'short', year: 'numeric'
+                })}
+              </span>
+              {sitting.paid > 0 && (
+                <span className="text-xs font-semibold text-green-600">
+                  ₹{parseFloat(sitting.paid).toLocaleString('en-IN')} paid
+                </span>
+              )}
+            </div>
+            {sitting.description && (
+              <p className="text-sm text-gray-700 mt-1">{sitting.description}</p>
+            )}
+            {sitting.prescription && (
+              <p className="text-xs text-gray-500 mt-1 italic">{sitting.prescription}</p>
+            )}
+            {sitting.notes && (
+              <p className="text-xs text-gray-400 mt-1">{sitting.notes}</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  </div>
+)}
       {/* Step 3 — Record sitting */}
       {selectedItem && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">

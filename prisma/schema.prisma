@@ -194,6 +194,8 @@ model TreatmentItem {
 
   treatmentPlan TreatmentPlan @relation(fields: [treatmentPlanId], references: [id])
   followUps     FollowUp[]
+  originalID String?
+  sittings Sitting[]
 }
 
 enum TreatmentUrgency {
@@ -312,7 +314,6 @@ model Treatment {
   clinic      Clinic      @relation(fields: [clinicId], references: [id])
   patient     Patient     @relation(fields: [patientId], references: [id])
   consultant  Consultant? @relation(fields: [consultantId], references: [id])
-  sittings    Sitting[]
   feeEntries  FeeEntry[]
 }
 
@@ -341,8 +342,8 @@ model Sitting {
   savedAt         DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
-  treatment Treatment @relation(fields: [treatmentId], references: [id])
+  description String?
+  treatmentItem TreatmentItem @relation(fields: [treatmentId], references: [id])
   patient   Patient   @relation(fields: [patientId], references: [id])
   clinic    Clinic    @relation(fields: [clinicId], references: [id])
 }

@@ -101,6 +101,7 @@ if (!patient) {
     estimatedCost: netCost,
     estimatedSessions: parseInt(t.expectedSittings || t.sittings || 1),
     consentStatus: 'SIGNED',
+    originalID: t.id || null,
   }
 })
 

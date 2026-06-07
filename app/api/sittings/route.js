@@ -37,6 +37,7 @@ export async function POST(request) {
         treatmentId: treatmentItemId,
         date: sittingDate,
         done: true,
+        description: done || null,
         prescription: prescription || null,
         notes: notes || null,
         consumablesTotal: 0,
