@@ -77,7 +77,7 @@ export default async function DashboardPage() {
       }
     }).catch(() => []),
     db.feeEntry.findMany({
-      where: { clinicId, status: 'Pending' },
+      where: { clinicId, status: 'PENDING' },
       include: { consultant: true },
     }),
     db.expense.findMany({
