@@ -26,7 +26,7 @@ export async function POST(request) {
     for (const e of expenses) {
       try {
         if (!e.description && !e.desc) { failed++; continue }
-        const date = e.date ? new Date(e.date) : new Date()
+        const date = e.date ? new Date(e.date + 'T00:00:00+05:30') : new Date()
         if (isNaN(date.getTime())) { failed++; continue }
 
         await db.expense.create({

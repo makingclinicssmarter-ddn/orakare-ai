@@ -50,7 +50,7 @@ export async function POST(request) {
 
         if (existing) { skipped++; continue }
 
-        const invoiceDate = inv.date ? new Date(inv.date) : new Date()
+        const invoiceDate = inv.date ? new Date(inv.date + 'T00:00:00+05:30') : new Date()
 
         const total = parseFloat(inv.total || 0)
         const paid = parseFloat(inv.paid || 0)

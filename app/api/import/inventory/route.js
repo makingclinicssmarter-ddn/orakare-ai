@@ -28,7 +28,7 @@ export async function POST(request) {
         if (!item.name) { failed++; continue }
 
         const expiryDate = item.expiryDate || item.expiry
-          ? new Date(item.expiryDate || item.expiry)
+          ? new Date((item.expiryDate || item.expiry) + 'T00:00:00+05:30')
           : null
 
         await db.inventoryItem.create({

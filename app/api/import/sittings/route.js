@@ -58,7 +58,7 @@ export async function POST(request) {
 
         if (!patient) { skipped++; continue }
 
-        const sittingDate = s.date ? new Date(s.date) : new Date()
+        const sittingDate = s.date ? new Date(s.date + 'T00:00:00+05:30') : new Date()
         if (isNaN(sittingDate.getTime())) { skipped++; continue }
 
         await db.sitting.create({

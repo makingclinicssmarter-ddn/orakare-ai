@@ -28,7 +28,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    const sittingDate = new Date(date + 'T' + (time || '09:00') + ':00')
+    const sittingDate = new Date(date + 'T' + (time || '09:00') + ':00+05:30')
 
     const sitting = await db.sitting.create({
       data: {
