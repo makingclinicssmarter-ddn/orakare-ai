@@ -182,7 +182,7 @@ function MixedChart({ findings, selectedTooth, presentationMode, onSelect, onCle
   )
 }
 
-export default function DentalChart({ patient, visitId, existing }) {
+export default function DentalChart({ patient, visitId, existing, onSaved }) {
   const router = useRouter()
   const patientAge = patient?.age || 0
   const autoType = getChartType(patientAge)
@@ -233,6 +233,7 @@ export default function DentalChart({ patient, visitId, existing }) {
       if (res.ok) {
         setSaved(true)
         router.refresh()
+        if (onSaved) onSaved()
       } else {
         alert('Something went wrong. Please try again.')
       }
