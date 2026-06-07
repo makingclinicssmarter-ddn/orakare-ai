@@ -98,6 +98,7 @@ export default async function NotificationsPage() {
       </div>
       <NotificationsView
         clinicName={doctor.clinic?.name || 'Orakare Dental Clinic'}
+googleReviewUrl={doctor.clinic?.googleReviewUrl || ''}
         todayAppointments={todayAppointments}
         yesterdaySittings={yesterdaySittings}
         checkinPatients={checkinPatients}

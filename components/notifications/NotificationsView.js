@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-const REVIEW_URL = 'https://g.page/r/YOUR_GOOGLE_REVIEW_LINK'
+
 
 function buildMsg(type, name, data, lang) {
   const first = (name || '').split(' ')[0]
@@ -34,8 +34,8 @@ function buildMsg(type, name, data, lang) {
 
   if (type === 'review') {
     return lang === 'hindi'
-      ? `नमस्ते ${first} जी 🙏\nआपसे मिलकर अच्छा लगा। उम्मीद है आपका अनुभव अच्छा रहा।\nयदि आप चाहें तो यहाँ अपना फीडबैक दे सकते हैं:\n${REVIEW_URL}\nधन्यवाद 🙏\n- ${doctor}`
-      : `Hello ${first},\nIt was lovely to see you. We hope your experience was comfortable.\nIf you would like to share your feedback, we would really appreciate it:\n${REVIEW_URL}\nThank you 🙏\n- ${doctor}`
+      ? `नमस्ते ${first} जी 🙏\nआशा है कि ${data.clinic} में आपका अनुभव अच्छा रहा।\nकृपया यहाँ अपना फीडबैक दें:\n${data.reviewUrl || ''}\nधन्यवाद 🙏\n- ${doctor}`
+      : `Hello ${first},\nIt was lovely to see you. We hope your experience was comfortable.\nIf you would like to share your feedback, we would really appreciate it:\n${data.reviewUrl || ''}\nThank you 🙏\n- ${doctor}`
   }
 
   return ''
@@ -142,7 +142,7 @@ function Section({ title, icon, count, children, emptyMsg }) {
 }
 
 export default function NotificationsView({
-  clinicName, todayAppointments, yesterdaySittings,
+  clinicName, googleReviewUrl, todayAppointments, yesterdaySittings,
   checkinPatients, overduePatients, reviewPatients
 }) {
   const [lang, setLang] = useState('hindi')
@@ -251,7 +251,7 @@ export default function NotificationsView({
       {/* Google review requests */}
       <Section title="Seek Google review — visited 3–7 days ago" icon="⭐" count={reviewPatients.length} emptyMsg="No patients eligible for review request">
         {reviewPatients.map(function(item) {
-          const msg = buildMsg('review', item.patient.name, { clinic: clinicName }, lang)
+          const msg = buildMsg('review', item.patient.name, { clinic: clinicName, reviewUrl: googleReviewUrl }, lang)
           return (
             <PatientCard
               key={item.patient.id}

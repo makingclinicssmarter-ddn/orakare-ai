@@ -16,6 +16,11 @@ model Clinic {
   address   String?
   phone     String?
   email     String?
+  qualification    String?
+regNo            String?
+gstNo            String?
+googleReviewUrl  String?
+invoicePrefix    String?  @default("OKR")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
