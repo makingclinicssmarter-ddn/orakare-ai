@@ -28,7 +28,10 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
     notes: '',
   })
 
-  const totalUnpaid = invoices.filter(function(i) { return i.status !== 'PAID' && i.status !== 'CANCELLED' }).reduce(function(sum, i) { return sum + Number(i.balance || 0) }, 0)
+  const totalUnpaid = invoices
+    .filter(function(i) { return i.status !== 'PAID' && i.status !== 'CANCELLED' })
+    .reduce(function(sum, i) { return sum + Number(i.balance || 0) }, 0)
+
   const totalRevenue = invoices.reduce(function(sum, i) { return sum + Number(i.paid || 0) }, 0)
 
   let filtered = invoices
@@ -125,7 +128,6 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
   return (
     <div className="space-y-4">
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
           <p className="text-xs text-gray-400">Total invoices</p>
@@ -143,7 +145,6 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
         </div>
       </div>
 
-      {/* Filters and new invoice */}
       <div className="flex gap-3 flex-wrap">
         <input
           type="text"
@@ -173,7 +174,6 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
         </button>
       </div>
 
-      {/* Invoice list */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {filtered.length === 0 ? (
           <div className="p-12 text-center">
@@ -184,7 +184,7 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  {['Invoice no', 'Patient', 'Date', 'Total', 'Paid', 'Balance', 'Status'].map(function(h) {
+                  {['Invoice no', 'Patient', 'Date', 'Total', 'Paid', 'Balance', 'Status', ''].map(function(h) {
                     return <th key={h} className="text-left text-xs font-medium text-gray-400 px-4 py-3">{h}</th>
                   })}
                 </tr>
@@ -210,6 +210,14 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
                           {invoice.status}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={function() { window.open('/api/invoice-print/' + invoice.id, '_blank') }}
+                          className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition"
+                        >
+                          Print
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -219,7 +227,6 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
         )}
       </div>
 
-      {/* New invoice slide-in */}
       {showForm && (
         <>
           <div className="fixed inset-0 bg-black bg-opacity-20 z-40" onClick={function() { setShowForm(false) }} />
@@ -235,8 +242,6 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
               </div>
 
               <div className="space-y-4">
-
-                {/* Patient search */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Patient *</label>
                   {!selectedPatient ? (
@@ -253,7 +258,11 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
                         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                           {filteredPatients.map(function(p) {
                             return (
-                              <div key={p.id} onClick={function() { setSelectedPatient(p); setPatientSearch(p.name); setShowPatientDrop(false) }} className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                              <div
+                                key={p.id}
+                                onClick={function() { setSelectedPatient(p); setPatientSearch(p.name); setShowPatientDrop(false) }}
+                                className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
+                              >
                                 <p className="text-sm font-medium text-gray-900">{p.name}</p>
                                 <p className="text-xs text-gray-400">{p.mobile}</p>
                               </div>
@@ -268,18 +277,26 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
                         <p className="text-sm font-medium text-gray-900">{selectedPatient.name}</p>
                         <p className="text-xs text-gray-500">{selectedPatient.mobile}</p>
                       </div>
-                      <button onClick={function() { setSelectedPatient(null); setPatientSearch('') }} className="text-xs text-gray-400 hover:text-gray-600">Change</button>
+                      <button
+                        onClick={function() { setSelectedPatient(null); setPatientSearch('') }}
+                        className="text-xs text-gray-400 hover:text-gray-600"
+                      >
+                        Change
+                      </button>
                     </div>
                   )}
                 </div>
 
-                {/* Date */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Date</label>
-                  <input type="date" value={form.date} onChange={function(e) { setForm(function(p) { return { ...p, date: e.target.value } }) }} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={function(e) { setForm(function(p) { return { ...p, date: e.target.value } }) }}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
                 </div>
 
-                {/* Items */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Items *</label>
                   <div className="space-y-2">
@@ -307,15 +324,21 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
                             onChange={function(e) { updateItem(index, 'unitPrice', e.target.value) }}
                             className="col-span-3 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
-                          <button onClick={function() { removeItem(index) }} className="col-span-1 text-gray-300 hover:text-red-500 text-lg">✕</button>
+                          <button
+                            onClick={function() { removeItem(index) }}
+                            className="col-span-1 text-gray-300 hover:text-red-500 text-lg"
+                          >
+                            ✕
+                          </button>
                         </div>
                       )
                     })}
                   </div>
-                  <button onClick={addItem} className="mt-2 text-xs text-indigo-600 hover:underline">+ Add item</button>
+                  <button onClick={addItem} className="mt-2 text-xs text-indigo-600 hover:underline">
+                    + Add item
+                  </button>
                 </div>
 
-                {/* Totals */}
                 <div className="bg-gray-50 rounded-xl p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Subtotal</span>
@@ -337,21 +360,32 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
                   </div>
                 </div>
 
-                {/* Payment */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1.5">Amount paid (₹)</label>
-                    <input type="number" min="0" placeholder="0" value={form.paid} onChange={function(e) { setForm(function(p) { return { ...p, paid: e.target.value } }) }} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={form.paid}
+                      onChange={function(e) { setForm(function(p) { return { ...p, paid: e.target.value } }) }}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1.5">Payment mode</label>
-                    <select value={form.paymentMode} onChange={function(e) { setForm(function(p) { return { ...p, paymentMode: e.target.value } }) }} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none bg-white">
-                      {['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque'].map(function(m) { return <option key={m} value={m}>{m}</option> })}
+                    <select
+                      value={form.paymentMode}
+                      onChange={function(e) { setForm(function(p) { return { ...p, paymentMode: e.target.value } }) }}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none bg-white"
+                    >
+                      {['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque'].map(function(m) {
+                        return <option key={m} value={m}>{m}</option>
+                      })}
                     </select>
                   </div>
                 </div>
 
-                {/* Balance preview */}
                 {total > 0 && (
                   <div className={'rounded-xl p-3 flex justify-between items-center ' + (balance > 0 ? 'bg-amber-50' : 'bg-green-50')}>
                     <span className={'text-sm font-medium ' + (balance > 0 ? 'text-amber-700' : 'text-green-700')}>
@@ -365,10 +399,20 @@ export default function InvoiceView({ invoices, patients, clinic, doctorName }) 
 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Notes</label>
-                  <input type="text" placeholder="Next sitting in 1 week..." value={form.notes} onChange={function(e) { setForm(function(p) { return { ...p, notes: e.target.value } }) }} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <input
+                    type="text"
+                    placeholder="Next sitting in 1 week..."
+                    value={form.notes}
+                    onChange={function(e) { setForm(function(p) { return { ...p, notes: e.target.value } }) }}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
                 </div>
 
-                <button onClick={handleSave} disabled={saving} className="w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
                   {saving ? 'Saving...' : 'Save invoice'}
                 </button>
               </div>

@@ -288,3 +288,19 @@ AI returns structured JSON with tooth number, condition, confidence, and reasoni
 
 *Last updated: June 2026*
 *Built with: Arian (Additional General Manager, OFD) + Claude*
+
+BUILD LIST:
+- Dashboard with pie chart, line chart, alerts, overdue patients, quick actions
+- WhatsApp notifications — Hindi + English, 5 message types, Dr. Shobhna Bansal signature
+- Settings page — clinic profile, doctor name, Google Review URL, invoice prefix
+- Patient edit — edit name, age, gender, mobile, address from Records page
+- Invoice print — clean printable HTML via /api/invoice-print/[id]
+- IST timezone fix — all date inputs use +05:30 offset
+- Notifications module — 5 sections, collapsible, WhatsApp deep links
+
+## Still pending
+- Google Calendar sync (Phase 2)
+- ABHA integration (Phase 3)  
+- Clinical flow for imported patients (visitId fix)
+- Google Review URL (she needs to share the link)
+- Test full clinical flow end to end with new patient

@@ -2,8 +2,9 @@ import { db } from '@/lib/db'
 import { auth } from '@clerk/nextjs/server'
 import RecordsView from '@/components/records/RecordsView'
 
-export default async function RecordsPage({ searchParams }) {
+export default async function RecordsPage({ searchParams: searchParamsPromise }) {
   const { userId } = await auth()
+  const searchParams = await searchParamsPromise
   const search = searchParams?.search || ''
 
   let doctor = await db.doctor.findFirst({
