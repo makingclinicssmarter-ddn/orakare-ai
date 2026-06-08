@@ -14,18 +14,18 @@ export default async function DashboardPage() {
 
   const clinicId = doctor.clinicId
   const now = new Date()
-  const todayStart = new Date(); todayStart.setHours(0,0,0,0)
-  const todayEnd = new Date(); todayEnd.setHours(23,59,59,999)
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1); yesterday.setHours(0,0,0,0)
-  const yesterdayEnd = new Date(); yesterdayEnd.setDate(yesterdayEnd.getDate()-1); yesterdayEnd.setHours(23,59,59,999)
-  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30)
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth()-5, 1)
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0, 0, 0, 0)
+  const yesterdayEnd = new Date(); yesterdayEnd.setDate(yesterdayEnd.getDate() - 1); yesterdayEnd.setHours(23, 59, 59, 999)
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+  const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
 
   const [
     todayAppointments,
     monthSittings,
-    allPatients,
+    totalPatientCount,
     activeTreatmentItems,
     allTreatmentItems,
     lowStockItems,
@@ -35,99 +35,128 @@ export default async function DashboardPage() {
     sixMonthSittings,
     sixMonthExpenses,
     yesterdaySittings,
+    recentSittings,
+    allPatientBalances,
   ] = await Promise.all([
+    // Today's appointments
     db.appointment.findMany({
       where: { clinicId, date: { gte: todayStart, lte: todayEnd } },
       orderBy: { date: 'asc' },
       include: { patient: true },
     }),
+    // This month's sittings for revenue
     db.sitting.findMany({
       where: { clinicId, date: { gte: monthStart } },
+      select: { paid: true },
     }),
-    db.patient.findMany({
-      where: { clinicId },
-      include: {
-        visits: {
-          include: {
-            treatmentPlan: { include: { treatmentItems: true } }
-          }
-        }
-      }
-    }),
+    // Just a count — no joins needed
+    db.patient.count({ where: { clinicId } }),
+    // Active treatment items for overdue detection
     db.treatmentItem.findMany({
       where: { consentStatus: 'SIGNED', treatmentPlan: { visit: { clinicId } } },
       include: {
         treatmentPlan: {
           include: {
-            visit: { include: { patient: true } }
+            visit: { include: { patient: { select: { id: true, name: true, mobile: true } } } }
           }
         }
       }
     }),
+    // All treatment items for procedure breakdown
     db.treatmentItem.findMany({
       where: { treatmentPlan: { visit: { clinicId } } },
+      select: { procedureName: true },
     }),
-    db.inventoryItem.findMany({
-      where: { clinicId, stockQty: { lte: db.inventoryItem.fields.minStock } },
-    }).catch(() => []),
+    // Low stock — count only
+    db.inventoryItem.count({
+      where: { clinicId, stockQty: { lte: 0 } },
+    }).catch(() => 0),
+    // Expiring items
     db.inventoryItem.findMany({
       where: {
         clinicId,
-        expiryDate: { lte: new Date(now.getTime() + 30*24*60*60*1000), gte: now }
-      }
+        expiryDate: {
+          lte: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+          gte: now,
+        }
+      },
+      select: { id: true },
     }).catch(() => []),
+    // Pending consultant fees
     db.feeEntry.findMany({
       where: { clinicId, status: 'PENDING' },
-      include: { consultant: true },
+      include: { consultant: { select: { name: true } } },
     }),
+    // This month's expenses
     db.expense.findMany({
       where: { clinicId, date: { gte: monthStart } },
+      select: { amount: true },
     }),
+    // 6 months sittings for chart
     db.sitting.findMany({
       where: { clinicId, date: { gte: sixMonthsAgo } },
+      select: { paid: true, date: true },
       orderBy: { date: 'asc' },
     }),
+    // 6 months expenses for chart
     db.expense.findMany({
       where: { clinicId, date: { gte: sixMonthsAgo } },
+      select: { amount: true, date: true },
       orderBy: { date: 'asc' },
     }),
+    // Yesterday's sittings
     db.sitting.findMany({
       where: { clinicId, date: { gte: yesterday, lte: yesterdayEnd } },
-      include: { patient: true },
+      include: { patient: { select: { id: true, name: true } } },
+    }),
+    // Last 12 months sittings for overdue detection — limited window
+    db.sitting.findMany({
+      where: { clinicId, date: { gte: twelveMonthsAgo } },
+      select: { patientId: true, paid: true, date: true },
+    }),
+    // Patient balances — just treatment items and patient id, no deep joins
+    db.treatmentPlan.findMany({
+      where: { visit: { clinicId } },
+      select: {
+        visit: { select: { patientId: true } },
+        treatmentItems: { select: { estimatedCost: true } },
+      },
     }),
   ])
 
+  // Calculate revenue and expenses
   const monthRevenue = monthSittings.reduce((s, x) => s + Number(x.paid || 0), 0)
   const monthExpTotal = monthExpenses.reduce((s, x) => s + Number(x.amount || 0), 0)
-const allSittings = await db.sitting.findMany({
-    where: { clinicId },
-  })
 
+  // Build paid-by-patient and sittings-by-patient from limited window
   const paidByPatient = {}
-  const sittingsByPatient = {}
-  allSittings.forEach(function(s) {
+  const lastSittingByPatient = {}
+  recentSittings.forEach(function(s) {
     paidByPatient[s.patientId] = (paidByPatient[s.patientId] || 0) + Number(s.paid || 0)
-    if (!sittingsByPatient[s.patientId]) sittingsByPatient[s.patientId] = []
-    sittingsByPatient[s.patientId].push(s)
+    const existing = lastSittingByPatient[s.patientId]
+    if (!existing || new Date(s.date) > new Date(existing)) {
+      lastSittingByPatient[s.patientId] = s.date
+    }
   })
 
-  const totalBalance = allPatients.reduce(function(sum, p) {
-    const est = p.visits.flatMap(function(v) {
-      return v.treatmentPlan?.treatmentItems || []
-    }).reduce(function(s, t) { return s + Number(t.estimatedCost || 0) }, 0)
-    const paid = paidByPatient[p.id] || 0
+  // Total balance from treatment plans
+  const totalBalance = allPatientBalances.reduce(function(sum, plan) {
+    const patientId = plan.visit?.patientId
+    const est = plan.treatmentItems.reduce((s, t) => s + Number(t.estimatedCost || 0), 0)
+    const paid = paidByPatient[patientId] || 0
     return sum + Math.max(0, est - paid)
   }, 0)
 
+  // Overdue patients — last sitting > 30 days ago
   const overduePatients = []
   const seenPatientIds = new Set()
-  activeTreatmentItems.forEach(item => {
+  activeTreatmentItems.forEach(function(item) {
     const patient = item.treatmentPlan?.visit?.patient
     if (!patient || seenPatientIds.has(patient.id)) return
-    const patientSittings = sittingsByPatient[patient.id] || []
-    const lastSitting = patientSittings.sort((a, b) => new Date(b.date) - new Date(a.date))[0]
-    const lastDate = lastSitting ? new Date(lastSitting.date) : null
-    const daysSince = lastDate ? Math.round((now - lastDate) / (1000*60*60*24)) : 999
+    const lastDate = lastSittingByPatient[patient.id]
+    const daysSince = lastDate
+      ? Math.round((now - new Date(lastDate)) / (1000 * 60 * 60 * 24))
+      : 999
     if (daysSince >= 30) {
       seenPatientIds.add(patient.id)
       overduePatients.push({
@@ -142,24 +171,25 @@ const allSittings = await db.sitting.findMany({
   })
   overduePatients.sort((a, b) => b.daysSince - a.daysSince)
 
+  // 6-month chart data
   const months = []
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    months.push(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'))
+    months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'))
   }
-
   const revenueByMonth = {}
   const expByMonth = {}
   months.forEach(m => { revenueByMonth[m] = 0; expByMonth[m] = 0 })
   sixMonthSittings.forEach(s => {
-    const m = new Date(s.date).toISOString().slice(0,7)
+    const m = new Date(s.date).toISOString().slice(0, 7)
     if (revenueByMonth[m] !== undefined) revenueByMonth[m] += Number(s.paid || 0)
   })
   sixMonthExpenses.forEach(e => {
-    const m = new Date(e.date).toISOString().slice(0,7)
+    const m = new Date(e.date).toISOString().slice(0, 7)
     if (expByMonth[m] !== undefined) expByMonth[m] += Number(e.amount || 0)
   })
 
+  // Top treatments
   const treatmentCounts = {}
   allTreatmentItems.forEach(t => {
     const name = t.procedureName || 'Other'
@@ -168,10 +198,6 @@ const allSittings = await db.sitting.findMany({
   const topTreatments = Object.entries(treatmentCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-
-  const lowStockCount = await db.inventoryItem.count({
-    where: { clinicId, stockQty: { lte: 0 } }
-  }).catch(() => 0)
 
   const pendingFeeTotal = pendingFees.reduce((s, f) => s + Number(f.consultantShare || 0), 0)
 
@@ -182,12 +208,12 @@ const allSittings = await db.sitting.findMany({
       todayAppointments={todayAppointments}
       monthRevenue={monthRevenue}
       monthExpTotal={monthExpTotal}
-      totalPatients={allPatients.length}
+      totalPatients={totalPatientCount}
       activeTreatmentsCount={activeTreatmentItems.length}
       overdueCount={overduePatients.length}
       overduePatients={overduePatients.slice(0, 4)}
       balancePending={totalBalance}
-      lowStockCount={lowStockCount}
+      lowStockCount={lowStockItems}
       expiringCount={expiringItems.length}
       pendingFeeTotal={pendingFeeTotal}
       months={months}

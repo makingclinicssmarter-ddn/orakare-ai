@@ -4,30 +4,25 @@ import { db } from '@/lib/db'
 
 export async function POST(request, props) {
   try {
-    const { userId } = await auth()
+    const [{ userId }] = await Promise.all([auth()])
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const params = await props.params
     const body = await request.json()
     const { visitId, signatureData } = body
 
-    const examConsent = await db.examConsent.upsert({
-      where: { visitId },
-      update: {
-        signatureUrl: signatureData,
-      },
-      create: {
-        visitId,
-        signatureUrl: signatureData,
-      },
-    })
-
-    await db.visit.update({
-      where: { id: visitId },
-      data: { status: 'EXAM_CONSENT_SIGNED' },
-    })
+    const [examConsent] = await Promise.all([
+      db.examConsent.upsert({
+        where: { visitId },
+        update: { signatureUrl: signatureData },
+        create: { visitId, signatureUrl: signatureData },
+      }),
+      db.visit.update({
+        where: { id: visitId },
+        data: { status: 'EXAM_CONSENT_SIGNED' },
+      }),
+    ])
 
     return NextResponse.json({ examConsent }, { status: 201 })
 

@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 
 export async function POST(request, props) {
   try {
-    const { userId } = await auth()
+    const [{ userId }] = await Promise.all([auth()])
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -12,19 +12,20 @@ export async function POST(request, props) {
     const body = await request.json()
     const { visitId, itemIds, signatureData, physicalForm, status } = body
 
-    await db.treatmentItem.updateMany({
-      where: { id: { in: itemIds } },
-      data: {
-        consentStatus: status,
-        consentSignedAt: new Date(),
-        consentDocUrl: physicalForm ? 'physical-form' : signatureData,
-      },
-    })
-
-    await db.visit.update({
-      where: { id: visitId },
-      data: { status: 'TREATMENT_CONSENT_SIGNED' },
-    })
+    await Promise.all([
+      db.treatmentItem.updateMany({
+        where: { id: { in: itemIds } },
+        data: {
+          consentStatus: status,
+          consentSignedAt: new Date(),
+          consentDocUrl: physicalForm ? 'physical-form' : signatureData,
+        },
+      }),
+      db.visit.update({
+        where: { id: visitId },
+        data: { status: 'TREATMENT_CONSENT_SIGNED' },
+      }),
+    ])
 
     return NextResponse.json({ success: true }, { status: 200 })
 

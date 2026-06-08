@@ -4,12 +4,14 @@ import { db } from '@/lib/db'
 
 export async function POST(request, { params }) {
   try {
-    const { userId } = await auth()
+    const [{ userId }, resolvedParams] = await Promise.all([
+      auth(),
+      params,
+    ])
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
     const body = await request.json()
     const { visitId, chiefComplaint, conditions, allergies, medications } = body
 
@@ -17,28 +19,17 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Chief complaint is required' }, { status: 400 })
     }
 
-    const medicalHistory = await db.medicalHistory.upsert({
-      where: { visitId },
-      update: {
-        chiefComplaint,
-        conditions,
-        allergies,
-        medications,
-      },
-      create: {
-        visitId,
-        chiefComplaint,
-        conditions,
-        allergies,
-        medications,
-        collectedBy: 'receptionist',
-      },
-    })
-
-    await db.visit.update({
-      where: { id: visitId },
-      data: { status: 'HISTORY_TAKEN' },
-    })
+    const [medicalHistory] = await Promise.all([
+      db.medicalHistory.upsert({
+        where: { visitId },
+        update: { chiefComplaint, conditions, allergies, medications },
+        create: { visitId, chiefComplaint, conditions, allergies, medications, collectedBy: 'receptionist' },
+      }),
+      db.visit.update({
+        where: { id: visitId },
+        data: { status: 'HISTORY_TAKEN' },
+      }),
+    ])
 
     return NextResponse.json({ medicalHistory }, { status: 201 })
 

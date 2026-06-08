@@ -7,26 +7,27 @@ import ExamConsent from '@/components/patients/ExamConsent'
 import PatientProgress from '@/components/patients/PatientProgress'
 
 export default async function PatientDetailPage(props) {
-  const { userId } = await auth()
   const params = await props.params
   const id = params.id
-
   if (!id) notFound()
 
-  const patient = await db.patient.findUnique({
-    where: { id: id },
-    include: {
-      visits: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        include: {
-          medicalHistory: true,
-          examConsent: true,
-          clinicalFindings: true,
+  const [{ userId }, patient] = await Promise.all([
+    auth(),
+    db.patient.findUnique({
+      where: { id },
+      include: {
+        visits: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            medicalHistory: true,
+            examConsent: true,
+            clinicalFindings: true,
+          }
         }
       }
-    }
-  })
+    }),
+  ])
 
   if (!patient) notFound()
 
@@ -37,10 +38,7 @@ export default async function PatientDetailPage(props) {
 
   return (
     <div>
-      <PatientProgress
-        patientId={id}
-        visitStatus={latestVisit?.status}
-      />
+      <PatientProgress patientId={id} visitStatus={latestVisit?.status} />
       <div className="p-6 max-w-2xl mx-auto">
         <div className="mb-6">
           <Link href="/dashboard/patients" className="text-sm text-gray-400 hover:text-gray-600">

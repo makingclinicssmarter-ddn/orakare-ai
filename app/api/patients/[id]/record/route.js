@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 
 export async function POST(request, props) {
   try {
-    const { userId } = await auth()
+    const [{ userId }] = await Promise.all([auth()])
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -19,9 +19,7 @@ export async function POST(request, props) {
         include: {
           medicalHistory: true,
           clinicalFindings: true,
-          treatmentPlan: {
-            include: { treatmentItems: true }
-          },
+          treatmentPlan: { include: { treatmentItems: true } },
           examConsent: true,
         }
       })
@@ -68,23 +66,17 @@ export async function POST(request, props) {
         ]
       }
 
-      const record = await db.clinicalRecord.upsert({
-        where: { visitId },
-        update: {
-          fhirBundle,
-          generatedAt: new Date(),
-        },
-        create: {
-          visitId,
-          fhirBundle,
-          generatedAt: new Date(),
-        },
-      })
-
-      await db.visit.update({
-        where: { id: visitId },
-        data: { status: 'COMPLETED' },
-      })
+      const [record] = await Promise.all([
+        db.clinicalRecord.upsert({
+          where: { visitId },
+          update: { fhirBundle, generatedAt: new Date() },
+          create: { visitId, fhirBundle, generatedAt: new Date() },
+        }),
+        db.visit.update({
+          where: { id: visitId },
+          data: { status: 'COMPLETED' },
+        }),
+      ])
 
       return NextResponse.json({ record }, { status: 200 })
     }
@@ -92,12 +84,8 @@ export async function POST(request, props) {
     if (action === 'lock') {
       const record = await db.clinicalRecord.update({
         where: { id: recordId },
-        data: {
-          lockedAt: new Date(),
-          lockedBy: userId,
-        },
+        data: { lockedAt: new Date(), lockedBy: userId },
       })
-
       return NextResponse.json({ record }, { status: 200 })
     }
 

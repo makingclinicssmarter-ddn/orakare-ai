@@ -6,31 +6,30 @@ import ClinicalRecord from '@/components/patients/ClinicalRecord'
 import PatientProgress from '@/components/patients/PatientProgress'
 
 export default async function RecordPage(props) {
-  const { userId } = await auth()
   const params = await props.params
   const id = params.id
-
   if (!id) notFound()
 
-  const patient = await db.patient.findUnique({
-    where: { id: id },
-    include: {
-      visits: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        include: {
-          medicalHistory: true,
-          clinicalFindings: true,
-          treatmentPlan: {
-            include: {
-              treatmentItems: true,
-            }
-          },
-          clinicalRecord: true,
+  const [{ userId }, patient] = await Promise.all([
+    auth(),
+    db.patient.findUnique({
+      where: { id },
+      include: {
+        visits: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            medicalHistory: true,
+            clinicalFindings: true,
+            treatmentPlan: {
+              include: { treatmentItems: true }
+            },
+            clinicalRecord: true,
+          }
         }
       }
-    }
-  })
+    }),
+  ])
 
   if (!patient) notFound()
 

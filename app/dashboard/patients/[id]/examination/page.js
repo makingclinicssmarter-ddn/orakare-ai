@@ -6,26 +6,27 @@ import ExaminationView from '@/components/patients/ExaminationView'
 import PatientProgress from '@/components/patients/PatientProgress'
 
 export default async function ExaminationPage(props) {
-  const { userId } = await auth()
   const params = await props.params
   const id = params.id
-
   if (!id) notFound()
 
-  const patient = await db.patient.findUnique({
-    where: { id: id },
-    include: {
-      visits: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        include: {
-          medicalHistory: true,
-          examConsent: true,
-          clinicalFindings: true,
+  const [{ userId }, patient] = await Promise.all([
+    auth(),
+    db.patient.findUnique({
+      where: { id },
+      include: {
+        visits: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            medicalHistory: true,
+            examConsent: true,
+            clinicalFindings: true,
+          }
         }
       }
-    }
-  })
+    }),
+  ])
 
   if (!patient) notFound()
 
