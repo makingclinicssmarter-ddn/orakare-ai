@@ -86,6 +86,10 @@ export default function ConsultationEntry({ doctorId, clinicId }) {
     if (visit.status !== 'COMPLETED') return { label: 'Consultation incomplete', color: 'bg-blue-50 text-blue-700' }
     return { label: 'Last visit: ' + new Date(visit.createdAt).toLocaleDateString('en-IN'), color: 'bg-slate-100 text-slate-600' }
   }
+  // Warm up DB on page load
+useEffect(function() {
+  fetch('/api/warmup').catch(function() {})
+}, [])
 
   return (
     <div className="max-w-xl">
