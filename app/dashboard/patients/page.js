@@ -1,50 +1,36 @@
 import { db } from '@/lib/db'
 import { auth } from '@clerk/nextjs/server'
-import PatientQueue from '@/components/patients/PatientQueue'
+import PatientsPage from '@/components/patients/PatientsPage'
 
-export default async function PatientsPage({ searchParams }) {
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
+export default async function Page() {
+  const { userId } = await auth()
 
-  const search = searchParams?.search || ''
+  const doctor = await db.doctor.findFirst({
+    where: { email: userId },
+  })
 
-  const [{ userId }, todayPatients, allPatients] = await Promise.all([
-    auth(),
-    db.patient.findMany({
-      where: {
-        visits: { some: { createdAt: { gte: todayStart } } }
-      },
-      include: {
-        visits: {
-          where: { createdAt: { gte: todayStart } },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
+  const [totalCount, recentPatients] = await Promise.all([
+    db.patient.count({
+      where: { clinicId: doctor.clinicId },
     }),
     db.patient.findMany({
-      where: search ? {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { mobile: { contains: search } },
-        ]
-      } : {},
+      where: { clinicId: doctor.clinicId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
       include: {
         visits: {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
     }),
   ])
 
   return (
-    <PatientQueue
-      patients={todayPatients}
-      allPatients={allPatients}
-      search={search}
+    <PatientsPage
+      doctor={doctor}
+      recentPatients={recentPatients}
+      totalCount={totalCount}
     />
   )
 }
