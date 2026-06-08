@@ -29,182 +29,48 @@ const SEVERITY_COLORS = {
 
 const IMAGE_TYPES = [
   { value: 'intraoral_photo', label: 'Intraoral Photo' },
+  { value: 'opg', label: 'OPG / Panoramic X-Ray' },
   { value: 'periapical', label: 'Periapical X-Ray' },
   { value: 'bitewing', label: 'Bitewing X-Ray' },
   { value: 'occlusal', label: 'Occlusal X-Ray' },
-  { value: 'opg', label: 'OPG' },
 ]
-
-const SYMPTOM_QUESTIONS = [
-  { id: 'location', label: 'Which tooth or area is bothering you?', placeholder: 'e.g. lower right back tooth, upper front' },
-  { id: 'duration', label: 'How long has it been?', placeholder: 'e.g. 3 days, 2 weeks, a month' },
-  { id: 'painType', label: 'Type of pain or discomfort?', placeholder: 'e.g. sharp, dull, throbbing, sensitivity, none' },
-  { id: 'trigger', label: 'What makes it worse?', placeholder: 'e.g. cold, hot, biting, spontaneous, nothing' },
-  { id: 'swelling', label: 'Any swelling or discharge?', placeholder: 'e.g. mild swelling on gum, no swelling' },
-]
-
-function ImageSlot({ index, slot, onUpdate, onRemove }) {
-  function handleFileChange(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    onUpdate(index, {
-      ...slot,
-      file,
-      preview: URL.createObjectURL(file),
-    })
-  }
-
-  return (
-    <div className="border border-gray-200 rounded-xl p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500">Image {index + 1}</span>
-        <button
-          onClick={function() { onRemove(index) }}
-          className="text-xs text-gray-300 hover:text-red-400 transition"
-        >
-          Remove
-        </button>
-      </div>
-
-      {!slot.preview ? (
-        <label className="block w-full cursor-pointer">
-          <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center hover:border-indigo-300 transition">
-            <p className="text-xs text-gray-400">Click to upload</p>
-            <p className="text-xs text-gray-300 mt-0.5">JPG, PNG, WebP</p>
-          </div>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-        </label>
-      ) : (
-        <div className="relative">
-          <img
-            src={slot.preview}
-            alt={'Image ' + (index + 1)}
-            className="w-full h-32 object-cover rounded-lg border border-gray-200"
-          />
-          <label className="absolute bottom-2 right-2 cursor-pointer">
-            <span className="text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-500 hover:bg-gray-50">
-              Change
-            </span>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-          </label>
-        </div>
-      )}
-
-      {/* Image type */}
-      <div>
-        <label className="text-xs text-gray-400 mb-1 block">Type <span className="text-gray-300">(optional)</span></label>
-        <div className="flex flex-wrap gap-1">
-          {IMAGE_TYPES.map(function(type) {
-            return (
-              <button
-                key={type.value}
-                onClick={function() { onUpdate(index, { ...slot, imageType: type.value }) }}
-                className={'text-xs px-2 py-1 rounded border transition ' + (
-                  slot.imageType === type.value
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300'
-                )}
-              >
-                {type.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Region / teeth */}
-      <div>
-        <label className="text-xs text-gray-400 mb-1 block">
-          Teeth / region visible <span className="text-gray-300">(optional)</span>
-        </label>
-        <input
-          type="text"
-          value={slot.region || ''}
-          onChange={function(e) { onUpdate(index, { ...slot, region: e.target.value }) }}
-          placeholder="e.g. 46, or lower right, or 14-17"
-          className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
-    </div>
-  )
-}
 
 export default function AIFindings({ patient, visitId, onFindingsConfirmed, existingFindings = {} }) {
-  const [slots, setSlots] = useState([{ file: null, preview: null, imageType: 'intraoral_photo', region: '' }])
-  const [symptoms, setSymptoms] = useState({ location: '', duration: '', painType: '', trigger: '', swelling: '' })
-  const [showSymptoms, setShowSymptoms] = useState(false)
+  const [image, setImage] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [imageType, setImageType] = useState('intraoral_photo')
+  const [clinicalNotes, setClinicalNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [suggestions, setSuggestions] = useState([])
   const [decisions, setDecisions] = useState({})
   const [analysed, setAnalysed] = useState(false)
 
-  function addSlot() {
-    if (slots.length >= 5) return
-    setSlots(function(prev) {
-      return [...prev, { file: null, preview: null, imageType: 'intraoral_photo', region: '' }]
-    })
+  function handleImageChange(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setImage(file)
+    setImagePreview(URL.createObjectURL(file))
+    setSuggestions([])
+    setDecisions({})
+    setAnalysed(false)
   }
-
-  function updateSlot(index, updated) {
-    setSlots(function(prev) {
-      const next = [...prev]
-      next[index] = updated
-      return next
-    })
-  }
-
-  function removeSlot(index) {
-    setSlots(function(prev) {
-      if (prev.length === 1) return [{ file: null, preview: null, imageType: 'intraoral_photo', region: '' }]
-      return prev.filter(function(_, i) { return i !== index })
-    })
-  }
-
-  function updateSymptom(id, value) {
-    setSymptoms(function(prev) { return { ...prev, [id]: value } })
-  }
-
-  const hasAnyImage = slots.some(function(s) { return s.file !== null })
 
   async function handleAnalyse() {
-    if (!hasAnyImage) {
-      alert('Please upload at least one image')
+    if (!image) {
+      alert('Please upload an image first')
       return
     }
     setLoading(true)
     try {
       const formData = new FormData()
+      formData.append('image', image)
       formData.append('visitId', visitId)
-      formData.append('symptoms', JSON.stringify(symptoms))
-
-      const imageMeta = []
-      slots.forEach(function(slot, index) {
-        if (slot.file) {
-          formData.append('image_' + index, slot.file)
-          imageMeta.push({
-            index,
-            imageType: slot.imageType || 'intraoral_photo',
-            region: slot.region || '',
-          })
-        }
-      })
-      formData.append('imageMeta', JSON.stringify(imageMeta))
-
+      formData.append('clinicalNotes', clinicalNotes)
+      formData.append('imageType', imageType)
       const res = await fetch('/api/patients/' + patient.id + '/ai-analysis', {
         method: 'POST',
         body: formData,
       })
-
       if (res.ok) {
         const data = await res.json()
         setSuggestions(data.suggestions || [])
@@ -225,14 +91,18 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
   }
 
   function decide(index, decision) {
-    setDecisions(function(prev) { return { ...prev, [index]: decision } })
+    setDecisions(function(prev) {
+      return { ...prev, [index]: decision }
+    })
   }
 
   function handleConfirmAll() {
     const confirmed = suggestions.filter(function(s, i) {
       return decisions[i] === 'confirmed'
     })
-    if (onFindingsConfirmed) onFindingsConfirmed(confirmed)
+    if (onFindingsConfirmed) {
+      onFindingsConfirmed(confirmed)
+    }
   }
 
   const pendingCount = Object.values(decisions).filter(function(d) { return d === 'pending' }).length
@@ -252,71 +122,79 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
           </span>
         </div>
 
-        {/* Symptom questionnaire */}
+        {/* Image type selector */}
         <div className="mb-4">
-          <button
-            onClick={function() { setShowSymptoms(function(p) { return !p }) }}
-            className="flex items-center gap-2 text-xs text-indigo-600 hover:text-indigo-700 font-medium mb-2"
-          >
-            <span>{showSymptoms ? '▾' : '▸'}</span>
-            Patient symptoms <span className="text-gray-400 font-normal">(optional — improves accuracy)</span>
-          </button>
-          {showSymptoms && (
-            <div className="space-y-2 mb-3 bg-indigo-50 rounded-xl p-3 border border-indigo-100">
-              {SYMPTOM_QUESTIONS.map(function(q) {
-                return (
-                  <div key={q.id}>
-                    <label className="text-xs text-indigo-700 mb-0.5 block">{q.label}</label>
-                    <input
-                      type="text"
-                      value={symptoms[q.id]}
-                      onChange={function(e) { updateSymptom(q.id, e.target.value) }}
-                      placeholder={q.placeholder}
-                      className="w-full border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          )}
+          <label className="text-xs text-gray-500 mb-1.5 block">
+            Image type <span className="text-gray-400">(optional — helps AI analyse correctly)</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {IMAGE_TYPES.map(function(type) {
+              return (
+                <button
+                  key={type.value}
+                  onClick={function() { setImageType(type.value) }}
+                  className={'text-xs px-3 py-1.5 rounded-lg border transition ' + (
+                    imageType === type.value
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                  )}
+                >
+                  {type.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Image slots */}
-        <div className="space-y-3 mb-4">
-          {slots.map(function(slot, index) {
-            return (
-              <ImageSlot
-                key={index}
-                index={index}
-                slot={slot}
-                onUpdate={updateSlot}
-                onRemove={removeSlot}
-              />
-            )
-          })}
+        {/* Image upload */}
+        <div className="mb-4">
+          <label className="text-xs text-gray-500 mb-1 block">
+            Upload intraoral photo or X-ray
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+            className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-200 file:text-xs file:font-medium file:text-gray-600 file:bg-gray-50 hover:file:bg-gray-100"
+          />
         </div>
 
-        {slots.length < 5 && (
-          <button
-            onClick={addSlot}
-            className="w-full border border-dashed border-gray-200 text-gray-400 text-xs py-2 rounded-lg hover:border-indigo-300 hover:text-indigo-500 transition mb-4"
-          >
-            + Add another image ({slots.length}/5)
-          </button>
+        {imagePreview && (
+          <div className="mb-4">
+            <img
+              src={imagePreview}
+              alt="Uploaded"
+              className="w-full max-h-48 object-cover rounded-lg border border-gray-200"
+            />
+          </div>
         )}
+
+        {/* Clinical context */}
+        <div className="mb-4">
+          <label className="text-xs text-gray-500 mb-1 block">
+            Additional clinical context <span className="text-gray-400">(optional)</span>
+          </label>
+          <textarea
+            value={clinicalNotes}
+            onChange={function(e) { setClinicalNotes(e.target.value) }}
+            placeholder="Pain on percussion, sensitivity to cold, swelling since 3 days..."
+            rows={2}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+          />
+        </div>
 
         <button
           onClick={handleAnalyse}
-          disabled={loading || !hasAnyImage}
+          disabled={loading || !image}
           className="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50"
         >
-          {loading ? 'Analysing...' : 'Analyse with AI'}
+          {loading ? 'Analysing image...' : 'Analyse with AI'}
         </button>
       </div>
 
       {analysed && suggestions.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-          <p className="text-sm text-gray-500">No specific findings identified from these images.</p>
+          <p className="text-sm text-gray-500">No specific findings identified from this image.</p>
           <p className="text-xs text-gray-400 mt-1">Continue with manual chart marking.</p>
         </div>
       )}
@@ -371,11 +249,6 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
                         <span className={'text-xs px-2 py-0.5 rounded-full border font-medium ' + condColor}>
                           {suggestion.condition}
                         </span>
-                        {suggestion.surface && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-                            {suggestion.surface}
-                          </span>
-                        )}
                         <span className={'text-xs font-medium ' + confColor}>
                           {suggestion.confidence} confidence
                         </span>
@@ -395,17 +268,7 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-600 leading-relaxed">{suggestion.reasoning}</p>
-                      {suggestion.differential && suggestion.differential.length > 0 && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Differential: {suggestion.differential.join(', ')}
-                        </p>
-                      )}
-                      {suggestion.recommendedNext && (
-                        <p className="text-xs text-indigo-600 mt-1">
-                          Next: {suggestion.recommendedNext}
-                        </p>
-                      )}
+                      <p className="text-xs text-gray-500 leading-relaxed">{suggestion.reasoning}</p>
                       {hasConflict && (
                         <p className="text-xs text-amber-600 mt-1">
                           Confirming this will not overwrite your finding. Update the chart manually if needed.
@@ -433,14 +296,24 @@ export default function AIFindings({ patient, visitId, onFindingsConfirmed, exis
                     {decision === 'confirmed' && (
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <span className="text-xs text-green-600 font-medium">Confirmed</span>
-                        <button onClick={function() { decide(index, 'pending') }} className="text-xs text-gray-400 hover:text-gray-600 ml-1">undo</button>
+                        <button
+                          onClick={function() { decide(index, 'pending') }}
+                          className="text-xs text-gray-400 hover:text-gray-600 ml-1"
+                        >
+                          undo
+                        </button>
                       </div>
                     )}
 
                     {decision === 'rejected' && (
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <span className="text-xs text-gray-400 font-medium">Rejected</span>
-                        <button onClick={function() { decide(index, 'pending') }} className="text-xs text-gray-400 hover:text-gray-600 ml-1">undo</button>
+                        <button
+                          onClick={function() { decide(index, 'pending') }}
+                          className="text-xs text-gray-400 hover:text-gray-600 ml-1"
+                        >
+                          undo
+                        </button>
                       </div>
                     )}
                   </div>
