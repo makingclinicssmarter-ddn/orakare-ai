@@ -323,7 +323,7 @@ model Treatment {
   treatmentItem    TreatmentItem? @relation(fields: [treatmentItemId], references: [id])
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-
+  //sittings Sitting[]
   clinic      Clinic      @relation(fields: [clinicId], references: [id])
   patient     Patient     @relation(fields: [patientId], references: [id])
   consultant  Consultant? @relation(fields: [consultantId], references: [id])

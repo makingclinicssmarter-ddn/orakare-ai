@@ -29,9 +29,7 @@ export default async function SittingsPage(props) {
         medicalHistory: true,
         treatmentPlan: {
           include: {
-            treatmentItems: {
-              where: { consentStatus: 'SIGNED' }
-            }
+            treatmentItems: true
           }
         }
       }
@@ -40,20 +38,18 @@ export default async function SittingsPage(props) {
 
   if (!patient || !visit) notFound()
 
-  // Get Treatment records created from consented TreatmentItems
-  const treatmentItemIds = visit.treatmentPlan?.treatmentItems?.map(
-    function(i) { return i.id }
+  // Only consented TreatmentItems
+  const consentedItems = visit.treatmentPlan?.treatmentItems?.filter(
+    function(i) { return i.consentStatus === 'SIGNED' }
   ) || []
 
-  const [treatments, receipts] = await Promise.all([
-    db.treatment.findMany({
-      where: { treatmentItemId: { in: treatmentItemIds } },
-      include: {
-        sittings: {
-          orderBy: { date: 'desc' }
-        }
-      },
-      orderBy: { createdAt: 'asc' }
+  const consentedItemIds = consentedItems.map(function(i) { return i.id })
+
+  // Fetch sittings and receipts in parallel
+  const [sittings, receipts] = await Promise.all([
+    db.sitting.findMany({
+      where: { treatmentId: { in: consentedItemIds } },
+      orderBy: { date: 'desc' }
     }),
     db.receipt.findMany({
       where: { patientId },
@@ -63,9 +59,19 @@ export default async function SittingsPage(props) {
     }),
   ])
 
-  // Calculate wallet
-  const totalEstimate = treatments.reduce(function(s, t) {
-    return s + (t.estimate || 0)
+  // Attach sittings to their TreatmentItem
+  const itemsWithSittings = consentedItems.map(function(item) {
+    return {
+      ...item,
+      sittings: sittings.filter(function(s) {
+        return s.treatmentId === item.id
+      })
+    }
+  })
+
+  // Wallet calculations
+  const totalEstimate = consentedItems.reduce(function(s, i) {
+    return s + (i.estimatedCost || 0)
   }, 0)
   const totalReceipts = receipts.reduce(function(s, r) {
     return s + (r.amount || 0)
@@ -89,7 +95,7 @@ export default async function SittingsPage(props) {
         patient={patient}
         visitId={visitId}
         patientId={patientId}
-        treatments={treatments}
+        items={itemsWithSittings}
         receipts={receipts}
         totalEstimate={totalEstimate}
         totalReceipts={totalReceipts}

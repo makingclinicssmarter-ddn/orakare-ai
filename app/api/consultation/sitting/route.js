@@ -8,51 +8,62 @@ export async function POST(request) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
-    const { treatmentId, patientId, visitId, date, description, notes, paid, payMode } = body
+    const { treatmentItemId, patientId, visitId, date, description, notes, paid, payMode } = body
 
     const doctor = await db.doctor.findFirst({ where: { email: userId } })
     if (!doctor) return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
 
-    const [sitting] = await Promise.all([
-      db.sitting.create({
-        data: {
-          treatmentId,
-          patientId,
-          clinicId: doctor.clinicId,
-          date: new Date(date),
-          description,
-          notes,
-          paid: paid || 0,
-          payMode,
-          done: true,
-        }
-      }),
-      db.treatment.update({
-        where: { id: treatmentId },
-        data: { status: 'IN_PROGRESS' }
-      }),
-    ])
+    // Create sitting linked to TreatmentItem
+    const sitting = await db.sitting.create({
+      data: {
+        treatmentId: treatmentItemId,
+        patientId,
+        clinicId: doctor.clinicId,
+        date: new Date(date),
+        description,
+        notes,
+        paid: paid || 0,
+        payMode,
+        done: true,
+      }
+    })
 
-    // If payment collected, create receipt and allocate
+    // If payment collected, create receipt and allocate to Treatment
     if (paid > 0) {
+      // Find the Treatment record linked to this TreatmentItem
+      const treatment = await db.treatment.findFirst({
+        where: { treatmentItemId }
+      })
+
       const receipt = await db.receipt.create({
         data: {
           clinicId: doctor.clinicId,
           patientId,
           amount: paid,
           paymentMode: payMode,
-          notes: 'Sitting payment — ' + description,
+          notes: 'Sitting payment — ' + (description || ''),
           date: new Date(date),
         }
       })
 
-      await db.paymentAllocation.create({
-        data: {
-          receiptId: receipt.id,
-          treatmentId,
-          amount: paid,
-        }
-      })
+      // Allocate to Treatment if it exists
+      if (treatment) {
+        await db.paymentAllocation.create({
+          data: {
+            receiptId: receipt.id,
+            treatmentId: treatment.id,
+            amount: paid,
+          }
+        })
+      }
+
+      // Update Treatment status to IN_PROGRESS
+      if (treatment) {
+        await db.treatment.update({
+          where: { id: treatment.id },
+          data: { status: 'IN_PROGRESS' }
+        })
+      }
     }
 
     return NextResponse.json({ sitting }, { status: 201 })

@@ -1,11 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Cheque', 'Other']
 
-function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
+function TreatmentItemCard({ item, patientId, visitId, onSittingAdded }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -16,11 +15,12 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
     payMode: 'Cash',
   })
 
-  const totalPaid = treatment.sittings.reduce(function(s, sitting) {
+  const sittings = item.sittings || []
+  const totalPaid = sittings.reduce(function(s, sitting) {
     return s + (sitting.paid || 0)
   }, 0)
-  const balance = (treatment.estimate || 0) - totalPaid
-  const sittingCount = treatment.sittings.length
+  const balance = (item.estimatedCost || 0) - totalPaid
+  const sittingCount = sittings.length
 
   async function handleSave() {
     if (!form.description.trim()) {
@@ -33,7 +33,7 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          treatmentId: treatment.id,
+          treatmentItemId: item.id,
           patientId,
           visitId,
           date: form.date,
@@ -53,7 +53,7 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
           paid: '',
           payMode: 'Cash',
         })
-        onSittingAdded(treatment.id, data.sitting)
+        onSittingAdded(item.id, data.sitting)
       } else {
         alert('Failed to save sitting. Please try again.')
       }
@@ -64,68 +64,91 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
     }
   }
 
+  const isComplete = totalPaid >= (item.estimatedCost || 0) && sittingCount >= (item.estimatedSessions || 1)
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      {/* Treatment header */}
+
+      {/* Item header */}
       <div className="p-4 flex items-center justify-between">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-medium text-slate-900">{treatment.type}</span>
-            {treatment.area && (
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-sm font-medium text-slate-900">
+              {item.procedureName}
+            </span>
+            {item.toothRef && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                Tooth {treatment.area}
+                Tooth {item.toothRef}
               </span>
             )}
             <span className={'text-xs px-2 py-0.5 rounded-full font-medium ' + (
-              treatment.status === 'COMPLETED'
+              isComplete
                 ? 'bg-green-50 text-green-700'
-                : treatment.status === 'IN_PROGRESS'
+                : sittingCount > 0
                   ? 'bg-blue-50 text-blue-700'
                   : 'bg-amber-50 text-amber-700'
             )}>
-              {treatment.status === 'COMPLETED' ? 'Completed' :
-               treatment.status === 'IN_PROGRESS' ? 'In progress' : 'Planned'}
+              {isComplete ? 'Complete' : sittingCount > 0 ? 'In progress' : 'Not started'}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-xs text-slate-500">
-            <span>Est. ₹{(treatment.estimate || 0).toLocaleString('en-IN')}</span>
+          <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+            <span>Est. ₹{(item.estimatedCost || 0).toLocaleString('en-IN')}</span>
             <span>·</span>
             <span>Paid ₹{totalPaid.toLocaleString('en-IN')}</span>
             <span>·</span>
             <span className={balance > 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-              {balance > 0 ? 'Due ₹' + balance.toLocaleString('en-IN') : 'Fully paid'}
+              {balance > 0
+                ? 'Due ₹' + balance.toLocaleString('en-IN')
+                : 'Fully paid'}
             </span>
             <span>·</span>
-            <span>{sittingCount} sitting{sittingCount !== 1 ? 's' : ''}</span>
+            <span>
+              {sittingCount} of {item.estimatedSessions || 1} sitting{(item.estimatedSessions || 1) > 1 ? 's' : ''}
+            </span>
           </div>
         </div>
         <button
           onClick={function() { setOpen(function(p) { return !p }) }}
-          disabled={treatment.status === 'COMPLETED'}
-          className="ml-4 bg-primary-700 text-white px-4 py-2 rounded-lg text-xs font-medium hover:bg-primary-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          className={'ml-4 px-4 py-2 rounded-lg text-xs font-medium transition ' + (
+            isComplete
+              ? 'border border-slate-200 text-slate-400 hover:bg-slate-50'
+              : 'bg-primary-700 text-white hover:bg-primary-800'
+          )}
         >
-          + Add sitting
+          {isComplete ? '+ Add sitting' : '+ Add sitting'}
         </button>
       </div>
 
       {/* Past sittings */}
-      {treatment.sittings.length > 0 && (
-        <div className="border-t border-slate-100 px-4 py-3 space-y-2">
-          {treatment.sittings.map(function(sitting, i) {
+      {sittings.length > 0 && (
+        <div className="border-t border-slate-100 divide-y divide-slate-100">
+          {sittings.map(function(sitting, i) {
             return (
-              <div key={sitting.id} className="flex items-start justify-between text-xs">
-                <div>
-                  <span className="text-slate-400 mr-2">
-                    {new Date(sitting.date).toLocaleDateString('en-IN', {
-                      day: 'numeric', month: 'short', year: 'numeric'
-                    })}
-                  </span>
-                  <span className="text-slate-700">{sitting.description || sitting.notes || 'Sitting ' + (i + 1)}</span>
+              <div key={sitting.id} className="px-4 py-2.5 flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs text-slate-400">
+                      {new Date(sitting.date).toLocaleDateString('en-IN', {
+                        day: 'numeric', month: 'short', year: 'numeric'
+                      })}
+                    </span>
+                    <span className="text-xs text-slate-300">·</span>
+                    <span className="text-xs text-slate-500">Sitting {sittings.length - i}</span>
+                  </div>
+                  <div className="text-sm text-slate-700">
+                    {sitting.description || 'No description'}
+                  </div>
+                  {sitting.notes && (
+                    <div className="text-xs text-slate-400 mt-0.5">{sitting.notes}</div>
+                  )}
                 </div>
                 {sitting.paid > 0 && (
-                  <span className="text-green-700 font-medium ml-4 flex-shrink-0">
-                    ₹{sitting.paid.toLocaleString('en-IN')} {sitting.payMode && '· ' + sitting.payMode}
-                  </span>
+                  <div className="ml-4 text-right flex-shrink-0">
+                    <div className="text-sm font-medium text-green-700">
+                      ₹{sitting.paid.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-xs text-slate-400">{sitting.payMode}</div>
+                  </div>
                 )}
               </div>
             )
@@ -137,7 +160,7 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
       {open && (
         <div className="border-t border-slate-200 bg-slate-50 p-4 space-y-3">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-            New sitting
+            Record sitting
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -153,7 +176,9 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
               />
             </div>
             <div>
-              <div className="text-xs text-slate-400 mb-1">Payment collected (₹)</div>
+              <div className="text-xs text-slate-400 mb-1">
+                Payment collected (₹)
+              </div>
               <input
                 type="number"
                 placeholder="0"
@@ -167,15 +192,18 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
           </div>
 
           <div>
-            <div className="text-xs text-slate-400 mb-1">Work done <span className="text-red-400">*</span></div>
+            <div className="text-xs text-slate-400 mb-1">
+              Work done <span className="text-red-400">*</span>
+            </div>
             <textarea
               value={form.description}
               onChange={function(e) {
                 setForm(function(p) { return { ...p, description: e.target.value } })
               }}
-              placeholder="Describe the procedure performed in this sitting..."
+              placeholder="Describe what was done in this sitting..."
               rows={2}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white resize-none"
+              autoFocus
             />
           </div>
 
@@ -198,7 +226,7 @@ function TreatmentCard({ treatment, patientId, visitId, onSittingAdded }) {
               <div className="text-xs text-slate-400 mb-1">Clinical notes</div>
               <input
                 type="text"
-                placeholder="Optional notes..."
+                placeholder="Optional..."
                 value={form.notes}
                 onChange={function(e) {
                   setForm(function(p) { return { ...p, notes: e.target.value } })
@@ -238,7 +266,7 @@ function WalletPanel({ patient, totalEstimate, totalReceipts, walletBalance, onP
     notes: '',
   })
 
-  const totalDue = totalEstimate - totalReceipts
+  const totalDue = Math.max(0, totalEstimate - totalReceipts)
 
   async function handleCollect() {
     if (!form.amount || parseFloat(form.amount) <= 0) {
@@ -291,7 +319,7 @@ function WalletPanel({ patient, totalEstimate, totalReceipts, walletBalance, onP
         <div className={totalDue > 0 ? 'bg-red-50 rounded-lg p-3' : 'bg-green-50 rounded-lg p-3'}>
           <div className="text-xs text-slate-400 mb-1">Balance due</div>
           <div className={'text-base font-medium ' + (totalDue > 0 ? 'text-red-700' : 'text-green-700')}>
-            ₹{Math.max(0, totalDue).toLocaleString('en-IN')}
+            ₹{totalDue.toLocaleString('en-IN')}
           </div>
         </div>
       </div>
@@ -299,10 +327,10 @@ function WalletPanel({ patient, totalEstimate, totalReceipts, walletBalance, onP
       {walletBalance > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
           <p className="text-xs font-medium text-amber-800">
-            Unallocated wallet balance: ₹{walletBalance.toLocaleString('en-IN')}
+            Unallocated balance: ₹{walletBalance.toLocaleString('en-IN')}
           </p>
           <p className="text-xs text-amber-600 mt-0.5">
-            This amount has been collected but not yet allocated to any treatment
+            Collected but not yet allocated to any treatment
           </p>
         </div>
       )}
@@ -352,7 +380,7 @@ function WalletPanel({ patient, totalEstimate, totalReceipts, walletBalance, onP
             <div className="text-xs text-slate-400 mb-1">Notes (optional)</div>
             <input
               type="text"
-              placeholder="e.g. advance payment, partial payment..."
+              placeholder="advance payment, partial payment..."
               value={form.notes}
               onChange={function(e) {
                 setForm(function(p) { return { ...p, notes: e.target.value } })
@@ -385,25 +413,23 @@ export default function SittingsScreen({
   patient,
   visitId,
   patientId,
-  treatments,
+  items,
   receipts,
   totalEstimate,
   totalReceipts,
   walletBalance,
 }) {
-  const router = useRouter()
-  const [treatmentList, setTreatmentList] = useState(treatments)
+  const [itemList, setItemList] = useState(items)
   const [totalCollected, setTotalCollected] = useState(totalReceipts)
   const [wallet, setWallet] = useState(walletBalance)
 
-  function handleSittingAdded(treatmentId, newSitting) {
-    setTreatmentList(function(prev) {
-      return prev.map(function(t) {
-        if (t.id !== treatmentId) return t
+  function handleSittingAdded(itemId, newSitting) {
+    setItemList(function(prev) {
+      return prev.map(function(item) {
+        if (item.id !== itemId) return item
         return {
-          ...t,
-          status: 'IN_PROGRESS',
-          sittings: [newSitting, ...t.sittings],
+          ...item,
+          sittings: [newSitting, ...(item.sittings || [])],
         }
       })
     })
@@ -417,18 +443,13 @@ export default function SittingsScreen({
     setWallet(function(p) { return p + amount })
   }
 
-  const allCompleted = treatmentList.every(function(t) {
-    return t.status === 'COMPLETED'
-  })
-
   return (
     <div className="p-6 space-y-5">
-
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-medium text-slate-900">Sittings</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            {treatmentList.length} active treatment{treatmentList.length !== 1 ? 's' : ''}
+            {itemList.length} consented treatment{itemList.length !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
@@ -442,35 +463,29 @@ export default function SittingsScreen({
         onPaymentAdded={handlePaymentAdded}
       />
 
-      {/* Treatment cards */}
-      {treatmentList.length === 0 ? (
+      {/* Treatment item cards */}
+      {itemList.length === 0 ? (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-          <p className="text-sm font-medium text-amber-800">No active treatments found</p>
+          <p className="text-sm font-medium text-amber-800">
+            No consented treatments found
+          </p>
           <p className="text-xs text-amber-600 mt-1">
-            Consent must be signed before sittings can be recorded.
+            Patient must sign consent before sittings can be recorded.
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {treatmentList.map(function(treatment) {
+          {itemList.map(function(item) {
             return (
-              <TreatmentCard
-                key={treatment.id}
-                treatment={treatment}
+              <TreatmentItemCard
+                key={item.id}
+                item={item}
                 patientId={patientId}
                 visitId={visitId}
                 onSittingAdded={handleSittingAdded}
               />
             )
           })}
-        </div>
-      )}
-
-      {/* Complete visit */}
-      {allCompleted && treatmentList.length > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-green-800">All treatments completed</p>
-          <p className="text-xs text-green-600 mt-1">You can now generate a visit summary.</p>
         </div>
       )}
     </div>
