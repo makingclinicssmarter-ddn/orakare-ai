@@ -37,6 +37,11 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(!!existing?.treatmentItems?.length)
+  const [selectedForConsent, setSelectedForConsent] = useState(
+    existing?.treatmentItems
+      ?.filter(function(i) { return i.consentStatus === 'SIGNED' })
+      ?.map(function(i) { return i.id }) || []
+  )
   const [newItem, setNewItem] = useState({
     procedureName: '',
     toothRef: '',
@@ -44,6 +49,15 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
     estimatedCost: '',
     estimatedSessions: '1',
   })
+
+  function toggleConsent(id) {
+    setSelectedForConsent(function(prev) {
+      if (prev.includes(id)) {
+        return prev.filter(function(x) { return x !== id })
+      }
+      return [...prev, id]
+    })
+  }
 
   async function handleGenerate() {
     setGenerating(true)
@@ -66,7 +80,6 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
       if (res.ok) {
         const data = await res.json()
         setItems(function(prev) {
-          // Merge AI suggestions with existing items, avoid duplicates
           const existing = [...prev]
           const newOnes = (data.items || []).filter(function(ai) {
             return !existing.some(function(e) {
@@ -163,6 +176,10 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
     return sum + (parseFloat(item.estimatedCost) || 0)
   }, 0)
 
+  const selectedCost = items
+    .filter(function(item) { return item.id && selectedForConsent.includes(item.id) })
+    .reduce(function(sum, item) { return sum + (parseFloat(item.estimatedCost) || 0) }, 0)
+
   return (
     <div className="space-y-5">
 
@@ -186,110 +203,112 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
         </button>
       </div>
 
-      {/* Add procedure form — always visible */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h3 className="text-sm font-medium text-slate-700 mb-4">Add procedure</h3>
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="col-span-2">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-              Procedure
+      {/* Add procedure form */}
+      {!saved && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <h3 className="text-sm font-medium text-slate-700 mb-4">Add procedure</h3>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="col-span-2">
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+                Procedure
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={SERVICES.includes(newItem.procedureName) ? newItem.procedureName : ''}
+                  onChange={function(e) {
+                    setNewItem(function(p) { return { ...p, procedureName: e.target.value } })
+                  }}
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                >
+                  <option value="">Select procedure...</option>
+                  {SERVICES.map(function(s) {
+                    return <option key={s} value={s}>{s}</option>
+                  })}
+                </select>
+                <input
+                  type="text"
+                  placeholder="Or type custom..."
+                  value={SERVICES.includes(newItem.procedureName) ? '' : newItem.procedureName}
+                  onChange={function(e) {
+                    setNewItem(function(p) { return { ...p, procedureName: e.target.value } })
+                  }}
+                  className="w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                />
+              </div>
             </div>
-            <div className="flex gap-2">
-              <select
-                value={newItem.procedureName}
-                onChange={function(e) {
-                  setNewItem(function(p) { return { ...p, procedureName: e.target.value } })
-                }}
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              >
-                <option value="">Select procedure...</option>
-                {SERVICES.map(function(s) {
-                  return <option key={s} value={s}>{s}</option>
-                })}
-              </select>
+
+            <div>
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+                Tooth / area
+              </div>
               <input
                 type="text"
-                placeholder="Or type custom..."
-                value={SERVICES.includes(newItem.procedureName) ? '' : newItem.procedureName}
+                placeholder="e.g. 46, upper right"
+                value={newItem.toothRef}
                 onChange={function(e) {
-                  setNewItem(function(p) { return { ...p, procedureName: e.target.value } })
+                  setNewItem(function(p) { return { ...p, toothRef: e.target.value } })
                 }}
-                className="w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              />
+            </div>
+
+            <div>
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+                Urgency
+              </div>
+              <select
+                value={newItem.urgency}
+                onChange={function(e) {
+                  setNewItem(function(p) { return { ...p, urgency: e.target.value } })
+                }}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              >
+                <option value="URGENT">Urgent</option>
+                <option value="SOON">Soon</option>
+                <option value="PLANNED">Planned</option>
+                <option value="MONITOR">Monitor</option>
+              </select>
+            </div>
+
+            <div>
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+                Estimated cost (₹)
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={newItem.estimatedCost}
+                onChange={function(e) {
+                  setNewItem(function(p) { return { ...p, estimatedCost: e.target.value } })
+                }}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
+              />
+            </div>
+
+            <div>
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+                Sittings needed
+              </div>
+              <input
+                type="number"
+                placeholder="1"
+                value={newItem.estimatedSessions}
+                onChange={function(e) {
+                  setNewItem(function(p) { return { ...p, estimatedSessions: e.target.value } })
+                }}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
               />
             </div>
           </div>
 
-          <div>
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-              Tooth / area
-            </div>
-            <input
-              type="text"
-              placeholder="e.g. 46, upper right"
-              value={newItem.toothRef}
-              onChange={function(e) {
-                setNewItem(function(p) { return { ...p, toothRef: e.target.value } })
-              }}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            />
-          </div>
-
-          <div>
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-              Urgency
-            </div>
-            <select
-              value={newItem.urgency}
-              onChange={function(e) {
-                setNewItem(function(p) { return { ...p, urgency: e.target.value } })
-              }}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            >
-              <option value="URGENT">Urgent</option>
-              <option value="SOON">Soon</option>
-              <option value="PLANNED">Planned</option>
-              <option value="MONITOR">Monitor</option>
-            </select>
-          </div>
-
-          <div>
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-              Estimated cost (₹)
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={newItem.estimatedCost}
-              onChange={function(e) {
-                setNewItem(function(p) { return { ...p, estimatedCost: e.target.value } })
-              }}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            />
-          </div>
-
-          <div>
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-              Sittings needed
-            </div>
-            <input
-              type="number"
-              placeholder="1"
-              value={newItem.estimatedSessions}
-              onChange={function(e) {
-                setNewItem(function(p) { return { ...p, estimatedSessions: e.target.value } })
-              }}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            />
-          </div>
+          <button
+            onClick={addItem}
+            className="w-full border border-slate-200 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50 transition"
+          >
+            + Add to plan
+          </button>
         </div>
-
-        <button
-          onClick={addItem}
-          className="w-full border border-slate-200 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50 transition"
-        >
-          + Add to plan
-        </button>
-      </div>
+      )}
 
       {/* Items list */}
       {items.length > 0 && (
@@ -306,11 +325,37 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
           <div className="space-y-2">
             {items.map(function(item, index) {
               const urgencyColor = URGENCY_COLORS[item.urgency] || URGENCY_COLORS.PLANNED
+              const isSelected = item.id && selectedForConsent.includes(item.id)
               return (
-                <div key={index} className="border border-slate-100 rounded-lg p-3">
+                <div
+                  key={index}
+                  className={'border rounded-lg p-3 transition ' + (
+                    saved
+                      ? isSelected
+                        ? 'border-primary-300 bg-primary-50'
+                        : 'border-slate-100 bg-white'
+                      : 'border-slate-100 bg-white'
+                  )}
+                >
                   <div className="flex items-start gap-3">
+                    {/* Checkbox — only show when saved */}
+                    {saved && item.id && item.consentStatus !== 'SIGNED' && (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={function() { toggleConsent(item.id) }}
+                        className="mt-1 w-4 h-4 rounded border-slate-300 text-primary-600 flex-shrink-0"
+                      />
+                    )}
+                    {saved && item.consentStatus === 'SIGNED' && (
+                      <div className="mt-1 w-4 h-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <span className={'text-xs px-2 py-0.5 rounded-full border font-medium ' + urgencyColor}>
                           {URGENCY_LABELS[item.urgency]}
                         </span>
@@ -325,16 +370,13 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
                           </span>
                         )}
                       </div>
-                      <input
-                        type="text"
-                        value={item.procedureName}
-                        onChange={function(e) { updateItem(index, 'procedureName', e.target.value) }}
-                        className="w-full text-sm font-medium text-slate-900 border-none outline-none bg-transparent mb-1"
-                      />
+                      <div className="text-sm font-medium text-slate-900 mb-1">
+                        {item.procedureName}
+                      </div>
                       <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500">
                         <span>₹{parseFloat(item.estimatedCost || 0).toLocaleString('en-IN')}</span>
                         <span>·</span>
-                        <span>{item.estimatedSessions} sitting{item.estimatedSessions > 1 ? 's' : ''}</span>
+                        <span>{item.estimatedSessions || 1} sitting{(item.estimatedSessions || 1) > 1 ? 's' : ''}</span>
                       </div>
                     </div>
                     {!saved && (
@@ -368,6 +410,7 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
 
           {saved && (
             <div className="space-y-3">
+              {/* Saved confirmation */}
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
                 <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -375,23 +418,49 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
                 <div>
                   <p className="text-sm font-medium text-green-800">Treatment plan saved</p>
                   <p className="text-xs text-green-600 mt-0.5">
-                    {items.length} procedure{items.length > 1 ? 's' : ''} · ₹{totalCost.toLocaleString('en-IN')} total
+                    Select treatments below to proceed with today
                   </p>
                 </div>
                 <button
                   onClick={function() { setSaved(false) }}
-                  className="ml-auto text-xs text-green-600 hover:underline"
+                  className="ml-auto text-xs text-green-600 hover:underline flex-shrink-0"
                 >
-                  Edit
+                  Edit plan
                 </button>
               </div>
+
+              {/* Selection summary */}
+              {selectedForConsent.length > 0 && (
+                <div className="bg-primary-50 border border-primary-200 rounded-xl p-4">
+                  <p className="text-sm font-medium text-primary-800">
+                    {selectedForConsent.length} treatment{selectedForConsent.length > 1 ? 's' : ''} selected for consent
+                  </p>
+                  <p className="text-xs text-primary-600 mt-0.5">
+                    Total: ₹{selectedCost.toLocaleString('en-IN')}
+                  </p>
+                </div>
+              )}
+
+              {/* Proceed button */}
               <button
                 onClick={function() {
-                  router.push(nextUrl || '/dashboard/patients/' + patient.id + '/record')
+                  if (selectedForConsent.length === 0) {
+                    alert('Please select at least one treatment to proceed with consent')
+                    return
+                  }
+                  const selectedIds = selectedForConsent.join(',')
+                  router.push(
+                    (nextUrl || '/dashboard/patients/' + patient.id + '/consent') +
+                    '?selected=' + selectedIds
+                  )
                 }}
-                className="w-full bg-primary-700 text-white py-3 rounded-xl text-sm font-medium hover:bg-primary-800 transition"
+                disabled={selectedForConsent.length === 0}
+                className="w-full bg-primary-700 text-white py-3 rounded-xl text-sm font-medium hover:bg-primary-800 transition disabled:opacity-50"
               >
-                Proceed to consent →
+                {selectedForConsent.length > 0
+                  ? 'Proceed to consent for ' + selectedForConsent.length + ' treatment' + (selectedForConsent.length > 1 ? 's' : '') + ' →'
+                  : 'Select treatments to proceed →'
+                }
               </button>
             </div>
           )}

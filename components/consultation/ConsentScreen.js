@@ -1,19 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import TreatmentConsent from '@/components/patients/TreatmentConsent'
 
 export default function ConsentScreen({ patient, visitId, patientId, items }) {
   const router = useRouter()
-  const [items_state, setItems] = useState(items)
+  const searchParams = useSearchParams()
+  const selectedParam = searchParams.get('selected')
 
-  const allConsented = items_state.length > 0 && items_state.every(function(item) {
+  const selectedIds = selectedParam ? selectedParam.split(',') : []
+  const filteredItems = selectedIds.length > 0
+    ? items.filter(function(item) { return selectedIds.includes(item.id) })
+    : items
+
+  const [itemState, setItemState] = useState(filteredItems)
+
+  const allConsented = itemState.length > 0 && itemState.every(function(item) {
     return item.consentStatus === 'SIGNED' || item.consentStatus === 'DECLINED'
   })
 
   function handleConsentComplete(signedItems) {
-    setItems(function(prev) {
+    setItemState(function(prev) {
       return prev.map(function(item) {
         const match = signedItems.find(function(s) { return s.id === item.id })
         return match ? { ...item, consentStatus: 'SIGNED' } : item
@@ -23,13 +31,12 @@ export default function ConsentScreen({ patient, visitId, patientId, items }) {
 
   return (
     <div className="space-y-4">
-      {/* Treatment items summary */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-medium text-slate-700 mb-4">
-          Procedures requiring consent
+          Treatments requiring consent today
         </h3>
         <div className="space-y-2">
-          {items_state.map(function(item, i) {
+          {itemState.map(function(item, i) {
             return (
               <div key={i} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-none">
                 <div>
@@ -58,9 +65,9 @@ export default function ConsentScreen({ patient, visitId, patientId, items }) {
           })}
         </div>
         <div className="flex justify-between mt-4 pt-3 border-t border-slate-200">
-          <span className="text-sm font-medium text-slate-700">Total estimate</span>
+          <span className="text-sm font-medium text-slate-700">Total</span>
           <span className="text-sm font-medium text-primary-700">
-            ₹{items_state.reduce(function(s, i) {
+            ₹{itemState.reduce(function(s, i) {
               return s + parseFloat(i.estimatedCost || 0)
             }, 0).toLocaleString('en-IN')}
           </span>
@@ -71,7 +78,7 @@ export default function ConsentScreen({ patient, visitId, patientId, items }) {
         <TreatmentConsent
           patient={patient}
           visitId={visitId}
-          items={items_state}
+          items={itemState}
           onConsentComplete={handleConsentComplete}
         />
       )}
@@ -79,9 +86,11 @@ export default function ConsentScreen({ patient, visitId, patientId, items }) {
       {allConsented && (
         <div className="space-y-3">
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-            <p className="text-sm font-medium text-green-800">All consents collected</p>
+            <p className="text-sm font-medium text-green-800">
+              Consent collected for all selected treatments
+            </p>
             <p className="text-xs text-green-600 mt-1">
-              Treatment can now begin. Proceed to sittings.
+              Treatment can now begin.
             </p>
           </div>
           <button
