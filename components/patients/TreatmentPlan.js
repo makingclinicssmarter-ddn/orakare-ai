@@ -24,7 +24,7 @@ const CONSENT_COLORS = {
   DECLINED: 'bg-red-100 text-red-700',
 }
 
-export default function TreatmentPlan({ patient, visitId, findings, medicalHistory, existing }) {
+export default function TreatmentPlan({ patient, visitId, findings, medicalHistory, existing, nextUrl }) {
   const router = useRouter()
   const [items, setItems] = useState(existing?.treatmentItems || [])
   const [generating, setGenerating] = useState(false)
@@ -352,10 +352,10 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
               </div>
               
                 <button
-                onClick={function() { router.push('/dashboard/patients/' + patient.id + '/record') }}
-                className="block w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-medium text-center hover:bg-indigo-700 transition"
+                onClick={function() { router.push(nextUrl || '/dashboard/patients/' + patient.id + '/record') }}
+                className="block w-full bg-primary-700 text-white py-3 rounded-xl text-sm font-medium text-center hover:bg-primary-800 transition"
               >
-                Generate clinical record
+                Proceed to consent →
               </button>
             </div>
           )}
