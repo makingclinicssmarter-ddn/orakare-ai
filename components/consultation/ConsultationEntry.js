@@ -59,6 +59,7 @@ export default function ConsultationEntry({ doctorId, clinicId }) {
         body: JSON.stringify({ patientId: patient.id })
       })
       const data = await res.json()
+      console.log('API response:', data)  // ← add this
 
       const base = '/dashboard/consultation/' + patient.id + '/' + data.visitId
       const routes = {
