@@ -36,7 +36,7 @@ export default function VisitSummary({
   return (
     <div className="p-6 space-y-5">
       {/* Action bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between print:hidden">
         <div>
           <h2 className="text-base font-medium text-slate-900">Visit summary</h2>
           <p className="text-sm text-slate-500 mt-0.5">

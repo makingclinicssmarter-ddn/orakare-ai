@@ -33,7 +33,7 @@ function PatientPanel({ patient, visit }) {
   const chiefComplaint = visit?.medicalHistory?.chiefComplaint || ''
 
   return (
-    <div className="w-64 min-w-64 border-r border-slate-200 bg-white flex flex-col overflow-y-auto">
+    <div className="w-64 min-w-64 border-r border-slate-200 bg-white flex flex-col overflow-y-auto print:hidden">
       {/* Patient identity */}
       <div className="p-5 border-b border-slate-100">
         <div className="w-12 h-12 rounded-full bg-primary-50 flex items-center justify-center text-primary-700 font-medium text-lg mb-3">
@@ -162,7 +162,7 @@ export default function ConsultationLayout({ patient, visit, visitId, patientId,
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Step bar */}
-        <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-2 flex-shrink-0">
+        <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-2 flex-shrink-0 print:hidden">
           {STEPS.map(function(step, i) {
             const isDone = step.n < activeStep
             const isActive = step.n === activeStep

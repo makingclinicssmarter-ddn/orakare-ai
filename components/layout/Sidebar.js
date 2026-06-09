@@ -38,7 +38,7 @@ export default function Sidebar() {
   }
 
   return (
-    <div className="w-[220px] min-w-[220px] h-screen flex flex-col bg-primary-700 sticky top-0">
+    <div className="w-[220px] min-w-[220px] h-screen flex flex-col bg-primary-700 sticky top-0 print:hidden">
       {/* Brand */}
       <div className="px-4 py-5 border-b border-white/10">
         <div className="text-primary-50 font-medium text-base tracking-tight">OraKare AI</div>
