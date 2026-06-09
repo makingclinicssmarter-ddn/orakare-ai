@@ -55,7 +55,7 @@ function ToothButton({ tooth, findings, selectedTooth, presentationMode, onSelec
   const colorClass = condition
     ? TOOTH_COLORS[condition] || 'bg-white border-gray-200'
     : 'bg-white border-gray-200 hover:border-indigo-300'
-  const size = small ? 'w-7 h-7 text-xs' : 'w-9 h-9 text-xs'
+  const size = small ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-xs'
 
   return (
     <div className="flex flex-col items-center gap-0.5">

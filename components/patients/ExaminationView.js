@@ -35,7 +35,7 @@ export default function ExaminationView({ patient, visitId, existing, nextUrl })
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <DentalChart
           key={chartKey}
           patient={patient}

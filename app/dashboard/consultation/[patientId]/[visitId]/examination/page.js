@@ -42,12 +42,14 @@ export default async function ExaminationPage(props) {
       activeStep={2}
       patientId={patientId}
     >
-      <ExaminationView
-        patient={patient}
-        visitId={visitId}
-        existing={visit.clinicalFindings}
-        nextUrl={'/dashboard/consultation/' + patientId + '/' + visitId + '/treatment'}
-      />
+      <div className="p-4">
+        <ExaminationView
+          patient={patient}
+          visitId={visitId}
+          existing={visit.clinicalFindings}
+          nextUrl={'/dashboard/consultation/' + patientId + '/' + visitId + '/treatment'}
+        />
+      </div>
     </ConsultationLayout>
   )
 }

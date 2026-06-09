@@ -33,7 +33,7 @@ function PatientPanel({ patient, visit }) {
   const chiefComplaint = visit?.medicalHistory?.chiefComplaint || ''
 
   return (
-    <div className="w-72 min-w-72 border-r border-slate-200 bg-white flex flex-col overflow-y-auto">
+    <div className="w-64 min-w-64 border-r border-slate-200 bg-white flex flex-col overflow-y-auto">
       {/* Patient identity */}
       <div className="p-5 border-b border-slate-100">
         <div className="w-12 h-12 rounded-full bg-primary-50 flex items-center justify-center text-primary-700 font-medium text-lg mb-3">
