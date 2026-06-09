@@ -30,7 +30,7 @@ export async function POST(request, props) {
     // Auto-create Treatment records from consented TreatmentItems
     if (status === 'SIGNED') {
       const [doctor, visit] = await Promise.all([
-        db.doctor.findFirst({ where: { email: userId } }),
+        db.doctor.findFirst({ where: { clerkId: userId } }),
         db.visit.findUnique({
           where: { id: visitId },
           include: {

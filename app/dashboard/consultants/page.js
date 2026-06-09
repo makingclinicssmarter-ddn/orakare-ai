@@ -6,7 +6,7 @@ export default async function ConsultantsPage() {
   const { userId } = await auth()
 
   const doctor = await db.doctor.findFirst({
-    where: { email: userId },
+    where: { clerkId: userId },
   })
 
   const consultants = doctor ? await db.consultant.findMany({

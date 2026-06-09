@@ -6,7 +6,7 @@ export default async function InvoicePage({ searchParams }) {
   const { userId } = await auth()
 
   const doctor = await db.doctor.findFirst({
-    where: { email: userId },
+    where: { clerkId: userId },
     include: { clinic: true },
   })
 

@@ -20,7 +20,7 @@ export async function POST(request) {
     }
 
     const doctor = await db.doctor.findFirst({
-      where: { email: userId },
+      where: { clerkId: userId },
     })
 
     if (!doctor) {
@@ -92,7 +92,7 @@ export async function GET(request) {
     const limit = 50
 
     const doctor = await db.doctor.findFirst({
-      where: { email: userId },
+      where: { clerkId: userId },
     })
 
     const where = {

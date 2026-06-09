@@ -8,7 +8,7 @@ export async function POST(request) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
-    const doctor = await db.doctor.findFirst({ where: { email: userId } })
+    const doctor = await db.doctor.findFirst({ where: { clerkId: userId } })
     if (!doctor) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const consultant = await db.consultant.create({

@@ -6,7 +6,7 @@ export default async function ConsultationPage() {
   const { userId } = await auth()
 
   const doctor = await db.doctor.findFirst({
-    where: { email: userId },
+    where: { clerkId: userId },
     include: { clinic: true }
   })
 

@@ -13,7 +13,7 @@ export async function POST(request) {
     const { invoices } = body
 
     const doctor = await db.doctor.findFirst({
-      where: { email: userId },
+      where: { clerkId: userId },
     })
 
     if (!doctor) {

@@ -17,7 +17,7 @@ export async function POST(request) {
     }
 
     let doctor = await db.doctor.findFirst({
-      where: { email: userId },
+      where: { clerkId: userId },
     })
 
     if (!doctor) {

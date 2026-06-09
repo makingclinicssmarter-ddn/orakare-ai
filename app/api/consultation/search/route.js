@@ -12,7 +12,7 @@ export async function GET(request) {
 
     if (q.length < 2) return NextResponse.json({ patients: [] })
 
-    const doctor = await db.doctor.findFirst({ where: { email: userId } })
+    const doctor = await db.doctor.findFirst({ where: { clerkId: userId } })
     if (!doctor) return NextResponse.json({ patients: [] })
 
     const patients = await db.patient.findMany({

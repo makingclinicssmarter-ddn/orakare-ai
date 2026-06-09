@@ -6,7 +6,7 @@ export default async function FinancePage() {
   const { userId } = await auth()
 
   const doctor = await db.doctor.findFirst({
-    where: { email: userId },
+    where: { clerkId: userId },
   })
 
   const [sittings, expenses, feeEntries] = doctor ? await Promise.all([

@@ -52,3 +52,16 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
 }
+@media print {
+  /* Hide sidebar and navigation */
+  nav, aside, .sidebar {
+    display: none !important;
+  }
+  /* Hide step bar and action buttons */
+  .print\:hidden {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}

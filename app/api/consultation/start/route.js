@@ -10,7 +10,7 @@ export async function POST(request) {
     const body = await request.json()
     const { patientId } = body
 
-    const doctor = await db.doctor.findFirst({ where: { email: userId } })
+    const doctor = await db.doctor.findFirst({ where: { clerkId: userId } })
     if (!doctor) return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
 
     // Check for incomplete visit

@@ -13,7 +13,7 @@ export default async function AppointmentsPage({ searchParams }) {
   nextDay.setDate(nextDay.getDate() + 1)
 
   let doctor = await db.doctor.findFirst({
-    where: { email: userId },
+    where: { clerkId: userId },
     include: { clinic: true }
   })
 

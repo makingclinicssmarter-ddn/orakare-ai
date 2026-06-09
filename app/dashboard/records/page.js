@@ -8,7 +8,7 @@ export default async function RecordsPage({ searchParams: searchParamsPromise })
   const search = searchParams?.search || ''
 
   let doctor = await db.doctor.findFirst({
-    where: { email: userId },
+    where: { clerkId: userId },
   })
 
   const patients = doctor ? await db.patient.findMany({

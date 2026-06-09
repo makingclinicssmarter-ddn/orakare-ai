@@ -6,7 +6,7 @@ export default async function InventoryPage() {
   const { userId } = await auth()
 
   const doctor = await db.doctor.findFirst({
-    where: { email: userId },
+    where: { clerkId: userId },
   })
 
   const items = doctor ? await db.inventoryItem.findMany({

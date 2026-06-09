@@ -83,7 +83,7 @@ If no treatment is needed, return: []`
 
     if (action === 'save') {
       let doctor = await db.doctor.findFirst({
-        where: { email: userId },
+        where: { clerkId: userId },
       })
 
       if (!doctor) {

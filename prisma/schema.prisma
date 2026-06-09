@@ -43,6 +43,7 @@ invoicePrefix    String?  @default("OKR")
 model Doctor {
   id           String   @id @default(cuid())
   clinicId     String
+  clerkId       String? @unique
   name         String
   email        String   @unique
   phone        String?
