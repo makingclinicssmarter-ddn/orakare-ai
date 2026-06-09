@@ -163,30 +163,56 @@ export default function StartVisit({ patient, visit, visitId }) {
 
         {/* Dental history */}
         {patient.dentalHistory && (
-          <div className="p-5 border-b border-slate-100">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
-              Dental history
-            </div>
-            <div className="text-xs text-slate-600 leading-relaxed">
-              {typeof patient.dentalHistory === 'string'
-                ? patient.dentalHistory
-                : JSON.stringify(patient.dentalHistory)}
-            </div>
-          </div>
+          (() => {
+            const dh = typeof patient.dentalHistory === 'string'
+              ? JSON.parse(patient.dentalHistory)
+              : patient.dentalHistory
+            const items = dh?.history || []
+            if (items.length === 0) return null
+            return (
+              <div className="p-5 border-b border-slate-100">
+                <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+                  Dental history
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {items.map(function(item, i) {
+                    return (
+                      <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700">
+                        {item}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()
         )}
 
         {/* Personal history */}
         {patient.personalHistory && (
-          <div className="p-5 border-b border-slate-100">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
-              Personal history
-            </div>
-            <div className="text-xs text-slate-600 leading-relaxed">
-              {typeof patient.personalHistory === 'string'
-                ? patient.personalHistory
-                : JSON.stringify(patient.personalHistory)}
-            </div>
-          </div>
+          (() => {
+            const ph = typeof patient.personalHistory === 'string'
+              ? JSON.parse(patient.personalHistory)
+              : patient.personalHistory
+            const habits = ph?.habits || []
+            if (habits.length === 0) return null
+            return (
+              <div className="p-5 border-b border-slate-100">
+                <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+                  Personal history
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {habits.map(function(habit, i) {
+                    return (
+                      <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                        {habit}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()
         )}
 
         {/* Past visits */}
