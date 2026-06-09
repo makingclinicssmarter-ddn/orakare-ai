@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import DentalChart from './DentalChart'
 import AIFindings from './AIFindings'
 
-export default function ExaminationView({ patient, visitId, existing }) {
+
   const router = useRouter()
   const [chartKey, setChartKey] = useState(0)
   const [examSaved, setExamSaved] = useState(!!existing?.clinicalNotes || Object.keys(existing?.toothFindings || {}).length > 0)

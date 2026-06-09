@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import DentalChart from './DentalChart'
 import AIFindings from './AIFindings'
 
-export default function ExaminationView({ patient, visitId, existing }) {
+export default function ExaminationView({ patient, visitId, existing, nextUrl }) {
   const router = useRouter()
   const [chartKey, setChartKey] = useState(0)
   const [examSaved, setExamSaved] = useState(!!existing?.clinicalNotes || Object.keys(existing?.toothFindings || {}).length > 0)
@@ -65,7 +65,7 @@ export default function ExaminationView({ patient, visitId, existing }) {
           )}
         </div>
         <button
-          onClick={() => router.push(`/dashboard/patients/${patient.id}/treatment`)}
+          onClick={() => router.push(nextUrl || `/dashboard/patients/${patient.id}/treatment`)}
           disabled={!examSaved}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             examSaved
