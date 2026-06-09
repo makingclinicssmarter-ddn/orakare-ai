@@ -27,6 +27,58 @@ export async function POST(request, props) {
       }),
     ])
 
+    // Auto-create Treatment records from consented TreatmentItems
+    if (status === 'SIGNED') {
+      const [doctor, visit] = await Promise.all([
+        db.doctor.findFirst({ where: { email: userId } }),
+        db.visit.findUnique({
+          where: { id: visitId },
+          include: {
+            treatmentPlan: {
+              include: {
+                treatmentItems: {
+                  where: { id: { in: itemIds } }
+                }
+              }
+            }
+          }
+        })
+      ])
+
+      if (doctor && visit) {
+        const existingTreatments = await db.treatment.findMany({
+          where: { treatmentItemId: { in: itemIds } },
+          select: { treatmentItemId: true }
+        })
+
+        const existingIds = new Set(existingTreatments.map(function(t) {
+          return t.treatmentItemId
+        }))
+
+        const itemsToCreate = visit.treatmentPlan?.treatmentItems?.filter(
+          function(item) { return !existingIds.has(item.id) }
+        ) || []
+
+        if (itemsToCreate.length > 0) {
+          await db.treatment.createMany({
+            data: itemsToCreate.map(function(item) {
+              return {
+                clinicId: doctor.clinicId,
+                patientId: visit.patientId,
+                visitId: visitId,
+                type: item.procedureName,
+                area: item.toothRef || null,
+                estimate: item.estimatedCost || 0,
+                expectedSittings: item.estimatedSessions || 1,
+                status: 'PLANNED',
+                treatmentItemId: item.id,
+              }
+            })
+          })
+        }
+      }
+    }
+
     return NextResponse.json({ success: true }, { status: 200 })
 
   } catch (error) {
