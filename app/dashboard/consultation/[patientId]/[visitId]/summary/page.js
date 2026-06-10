@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { getDoctorContext } from '@/lib/auth-helpers'
 import ConsultationLayout from '@/components/consultation/ConsultationLayout'
 import VisitSummary from '@/components/consultation/VisitSummary'
 
@@ -8,47 +8,38 @@ export default async function SummaryPage(props) {
   const params = await props.params
   const { patientId, visitId } = params
 
-  const [{ userId }, patient, visit] = await Promise.all([
-    auth(),
-    db.patient.findUnique({
-      where: { id: patientId },
+  const { clinicId } = await getDoctorContext()
+  if (!clinicId) redirect('/sign-in')
+
+  const [patient, visit] = await Promise.all([
+    db.patient.findFirst({
+      where: { id: patientId, clinicId },
       select: {
-        id: true,
-        name: true,
-        age: true,
-        gender: true,
-        mobile: true,
-        originalID: true,
-        address: true,
-        dentalHistory: true,
-        personalHistory: true,
-      }
+        id: true, name: true, age: true, gender: true, mobile: true,
+        originalID: true, address: true, dentalHistory: true, personalHistory: true,
+      },
     }),
-    db.visit.findUnique({
-      where: { id: visitId },
+    db.visit.findFirst({
+      where: { id: visitId, clinicId },
       include: {
         medicalHistory: true,
         clinicalFindings: true,
         treatmentPlan: {
           include: {
             treatmentItems: {
-              include: {
-                sittings: {
-                  orderBy: { date: 'asc' }
-                }
-              }
-            }
-          }
-        }
-      }
+              include: { sittings: { orderBy: { date: 'asc' } } },
+            },
+          },
+        },
+      },
     }),
   ])
 
   if (!patient || !visit) notFound()
 
-  // Get receipts for this patient
+  // Receipts for this clinic's patient
   const receipts = await db.receipt.findMany({
-    where: { patientId },
+    where: { patientId, clinicId },
     orderBy: { date: 'desc' },
     take: 50,
   })

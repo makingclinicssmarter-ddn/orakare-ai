@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import Anthropic from '@anthropic-ai/sdk'
+import { getDoctorContext, verifyVisitAccess, unauthorized, forbidden } from '@/lib/auth-helpers'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-export async function POST(request, props) {
+export async function POST(request) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { clinicId, doctorId } = await getDoctorContext()
+    if (!clinicId) return unauthorized()
 
-    const params = await props.params
     const body = await request.json()
     const { visitId, action, findings, clinicalNotes, medicalHistory, items } = body
+
+    if (!visitId) return NextResponse.json({ error: 'visitId required' }, { status: 400 })
+
+    const visit = await verifyVisitAccess(visitId, clinicId)
+    if (!visit) return forbidden('Visit not in your clinic')
 
     if (action === 'generate') {
       const prompt = `You are an AI dental assistant helping a licensed dentist create a treatment plan.
@@ -54,24 +54,16 @@ If no treatment is needed, return: []`
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
+        messages: [{ role: 'user', content: prompt }],
       })
 
       const responseText = response.content[0].text.trim()
       let generatedItems = []
-
       try {
         generatedItems = JSON.parse(responseText)
       } catch (e) {
         const match = responseText.match(/\[[\s\S]*\]/)
-        if (match) {
-          generatedItems = JSON.parse(match[0])
-        }
+        if (match) generatedItems = JSON.parse(match[0])
       }
 
       const itemsWithConsent = generatedItems.map(function(item) {
@@ -82,52 +74,37 @@ If no treatment is needed, return: []`
     }
 
     if (action === 'save') {
-      let doctor = await db.doctor.findFirst({
-        where: { clerkId: userId },
-      })
-
-      if (!doctor) {
-        return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
-      }
-
-      const existingPlan = await db.treatmentPlan.findUnique({
-        where: { visitId },
-      })
-
-      if (existingPlan) {
-        await db.treatmentItem.deleteMany({
-          where: { treatmentPlanId: existingPlan.id },
-        })
-        await db.treatmentPlan.delete({
-          where: { visitId },
-        })
-      }
-
-      const plan = await db.treatmentPlan.create({
-        data: {
-          visitId,
-          approvedBy: doctor.id,
-          treatmentItems: {
-            create: items.map(function(item) {
-              return {
-                procedureName: item.procedureName,
-                toothRef: item.toothRef || null,
-                urgency: item.urgency || 'PLANNED',
-                estimatedCost: parseFloat(item.estimatedCost) || 0,
-                estimatedSessions: parseInt(item.estimatedSessions) || 1,
-                consentStatus: 'PENDING',
-              }
-            }),
+      const plan = await db.$transaction(async (tx) => {
+        // Replace existing plan if present
+        const existingPlan = await tx.treatmentPlan.findUnique({ where: { visitId } })
+        if (existingPlan) {
+          await tx.treatmentItem.deleteMany({ where: { treatmentPlanId: existingPlan.id } })
+          await tx.treatmentPlan.delete({ where: { visitId } })
+        }
+        const created = await tx.treatmentPlan.create({
+          data: {
+            visitId,
+            approvedBy: doctorId,
+            treatmentItems: {
+              create: (items || []).map(function(item) {
+                return {
+                  procedureName: item.procedureName,
+                  toothRef: item.toothRef || null,
+                  urgency: item.urgency || 'PLANNED',
+                  estimatedCost: parseFloat(item.estimatedCost) || 0,
+                  estimatedSessions: parseInt(item.estimatedSessions) || 1,
+                  consentStatus: 'PENDING',
+                }
+              }),
+            },
           },
-        },
-        include: {
-          treatmentItems: true,
-        },
-      })
-
-      await db.visit.update({
-        where: { id: visitId },
-        data: { status: 'TREATMENT_PLANNED' },
+          include: { treatmentItems: true },
+        })
+        await tx.visit.update({
+          where: { id: visitId },
+          data: { status: 'TREATMENT_PLANNED' },
+        })
+        return created
       })
 
       return NextResponse.json({ plan }, { status: 201 })

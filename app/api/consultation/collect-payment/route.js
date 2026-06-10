@@ -1,27 +1,33 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
+import {
+  getDoctorContext,
+  verifyPatientAccess,
+  unauthorized,
+  forbidden,
+} from '@/lib/auth-helpers'
 
 export async function POST(request) {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { clinicId } = await getDoctorContext()
+    if (!clinicId) return unauthorized()
 
     const body = await request.json()
     const { patientId, amount, paymentMode, notes } = body
+    if (!patientId) return NextResponse.json({ error: 'patientId required' }, { status: 400 })
 
-    const doctor = await db.doctor.findFirst({ where: { clerkId: userId } })
-    if (!doctor) return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
+    const patient = await verifyPatientAccess(patientId, clinicId)
+    if (!patient) return forbidden('Patient not in your clinic')
 
     const receipt = await db.receipt.create({
       data: {
-        clinicId: doctor.clinicId,
+        clinicId,
         patientId,
         amount,
         paymentMode,
         notes: notes || 'General payment',
         date: new Date(),
-      }
+      },
     })
 
     return NextResponse.json({ receipt }, { status: 201 })

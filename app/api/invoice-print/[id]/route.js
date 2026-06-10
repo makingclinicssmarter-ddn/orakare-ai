@@ -1,10 +1,17 @@
 import { db } from '@/lib/db'
+import { getDoctorContext } from '@/lib/auth-helpers'
 
 export async function GET(request, { params }) {
   const { id } = await params
 
-  const invoice = await db.invoice.findUnique({
-    where: { id },
+  // Authn + clinic scoping — was previously public, leaking patient PII
+  const { clinicId } = await getDoctorContext()
+  if (!clinicId) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  const invoice = await db.invoice.findFirst({
+    where: { id, clinicId },
     include: { patient: true, items: true }
   })
 
@@ -12,13 +19,10 @@ export async function GET(request, { params }) {
     return new Response('Invoice not found', { status: 404 })
   }
 
-  const clinic = await db.clinic.findUnique({
-    where: { id: invoice.clinicId }
-  })
-
-  const doctor = await db.doctor.findFirst({
-    where: { clinicId: invoice.clinicId }
-  })
+  const [clinic, doctor] = await Promise.all([
+    db.clinic.findUnique({ where: { id: clinicId } }),
+    db.doctor.findFirst({ where: { clinicId } }),
+  ])
 
   const doctorName = doctor?.name && doctor.name !== 'Doctor' ? doctor.name : 'Dr. Shobhna Bansal'
   const invoiceDate = new Date(invoice.date).toLocaleDateString('en-IN', {

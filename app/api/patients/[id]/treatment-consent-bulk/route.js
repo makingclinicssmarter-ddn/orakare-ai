@@ -1,71 +1,78 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
+import {
+  getDoctorContext,
+  verifyVisitAccess,
+  verifyTreatmentItemsAccess,
+  unauthorized,
+  forbidden,
+} from '@/lib/auth-helpers'
 
-export async function POST(request, props) {
+export async function POST(request) {
   try {
-    const [{ userId }] = await Promise.all([auth()])
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { clinicId } = await getDoctorContext()
+    if (!clinicId) return unauthorized()
 
     const body = await request.json()
     const { visitId, itemIds, signatureData, physicalForm, status } = body
 
-    await Promise.all([
-      db.treatmentItem.updateMany({
+    if (!visitId || !Array.isArray(itemIds) || itemIds.length === 0 || !status) {
+      return NextResponse.json({ error: 'visitId, itemIds and status required' }, { status: 400 })
+    }
+
+    const visit = await verifyVisitAccess(visitId, clinicId)
+    if (!visit) return forbidden('Visit not in your clinic')
+
+    // Confirm every treatment item belongs to this clinic. Reject the whole
+    // request if any are mixed-tenant — never partially apply consent.
+    const allowed = await verifyTreatmentItemsAccess(itemIds, clinicId)
+    if (allowed.length !== itemIds.length) {
+      return forbidden('One or more treatment items not in your clinic')
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.treatmentItem.updateMany({
         where: { id: { in: itemIds } },
         data: {
           consentStatus: status,
           consentSignedAt: new Date(),
           consentDocUrl: physicalForm ? 'physical-form' : signatureData,
         },
-      }),
-      db.visit.update({
+      })
+      await tx.visit.update({
         where: { id: visitId },
         data: { status: 'TREATMENT_CONSENT_SIGNED' },
-      }),
-    ])
+      })
 
-    // Auto-create Treatment records from consented TreatmentItems
-    if (status === 'SIGNED') {
-      const [doctor, visit] = await Promise.all([
-        db.doctor.findFirst({ where: { clerkId: userId } }),
-        db.visit.findUnique({
+      // Auto-create Treatment execution rows for newly consented items
+      if (status === 'SIGNED') {
+        const fullVisit = await tx.visit.findUnique({
           where: { id: visitId },
           include: {
             treatmentPlan: {
               include: {
-                treatmentItems: {
-                  where: { id: { in: itemIds } }
-                }
-              }
-            }
-          }
+                treatmentItems: { where: { id: { in: itemIds } } },
+              },
+            },
+          },
         })
-      ])
 
-      if (doctor && visit) {
-        const existingTreatments = await db.treatment.findMany({
+        const existing = await tx.treatment.findMany({
           where: { treatmentItemId: { in: itemIds } },
-          select: { treatmentItemId: true }
+          select: { treatmentItemId: true },
         })
+        const existingIds = new Set(existing.map(function(t) { return t.treatmentItemId }))
 
-        const existingIds = new Set(existingTreatments.map(function(t) {
-          return t.treatmentItemId
-        }))
-
-        const itemsToCreate = visit.treatmentPlan?.treatmentItems?.filter(
-          function(item) { return !existingIds.has(item.id) }
-        ) || []
+        const itemsToCreate = (fullVisit.treatmentPlan?.treatmentItems || [])
+          .filter(function(item) { return !existingIds.has(item.id) })
 
         if (itemsToCreate.length > 0) {
-          await db.treatment.createMany({
+          await tx.treatment.createMany({
             data: itemsToCreate.map(function(item) {
               return {
-                clinicId: doctor.clinicId,
-                patientId: visit.patientId,
-                visitId: visitId,
+                clinicId,
+                patientId: fullVisit.patientId,
+                visitId,
                 type: item.procedureName,
                 area: item.toothRef || null,
                 estimate: item.estimatedCost || 0,
@@ -73,11 +80,11 @@ export async function POST(request, props) {
                 status: 'PLANNED',
                 treatmentItemId: item.id,
               }
-            })
+            }),
           })
         }
       }
-    }
+    })
 
     return NextResponse.json({ success: true }, { status: 200 })
 

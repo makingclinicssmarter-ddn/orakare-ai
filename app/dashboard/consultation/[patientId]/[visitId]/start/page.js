@@ -1,16 +1,18 @@
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { getDoctorContext } from '@/lib/auth-helpers'
 import StartVisit from '@/components/consultation/StartVisit'
 
 export default async function StartPage(props) {
   const params = await props.params
   const { patientId, visitId } = params
 
-  const [{ userId }, patient, visit] = await Promise.all([
-    auth(),
-    db.patient.findUnique({
-      where: { id: patientId },
+  const { clinicId } = await getDoctorContext()
+  if (!clinicId) redirect('/sign-in')
+
+  const [patient, visit] = await Promise.all([
+    db.patient.findFirst({
+      where: { id: patientId, clinicId },
       select: {
         id: true,
         name: true,
@@ -28,9 +30,7 @@ export default async function StartPage(props) {
           select: {
             id: true,
             createdAt: true,
-            medicalHistory: {
-              select: { chiefComplaint: true }
-            },
+            medicalHistory: { select: { chiefComplaint: true } },
             treatmentPlan: {
               select: {
                 treatmentItems: {
@@ -38,16 +38,16 @@ export default async function StartPage(props) {
                     procedureName: true,
                     toothRef: true,
                     consentStatus: true,
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     }),
-    db.visit.findUnique({
-      where: { id: visitId },
+    db.visit.findFirst({
+      where: { id: visitId, clinicId },
       select: {
         id: true,
         status: true,
@@ -57,9 +57,9 @@ export default async function StartPage(props) {
             conditions: true,
             allergies: true,
             medications: true,
-          }
-        }
-      }
+          },
+        },
+      },
     }),
   ])
 

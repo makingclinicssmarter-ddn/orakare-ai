@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { db } from '@/lib/db'
-import { auth } from '@clerk/nextjs/server'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { getDoctorContext } from '@/lib/auth-helpers'
 import MedicalHistoryForm from '@/components/patients/MedicalHistoryForm'
 import ExamConsent from '@/components/patients/ExamConsent'
 import PatientProgress from '@/components/patients/PatientProgress'
@@ -11,23 +11,23 @@ export default async function PatientDetailPage(props) {
   const id = params.id
   if (!id) notFound()
 
-  const [{ userId }, patient] = await Promise.all([
-    auth(),
-    db.patient.findUnique({
-      where: { id },
-      include: {
-        visits: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          include: {
-            medicalHistory: true,
-            examConsent: true,
-            clinicalFindings: true,
-          }
-        }
-      }
-    }),
-  ])
+  const { clinicId } = await getDoctorContext()
+  if (!clinicId) redirect('/sign-in')
+
+  const patient = await db.patient.findFirst({
+    where: { id, clinicId },
+    include: {
+      visits: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        include: {
+          medicalHistory: true,
+          examConsent: true,
+          clinicalFindings: true,
+        },
+      },
+    },
+  })
 
   if (!patient) notFound()
 

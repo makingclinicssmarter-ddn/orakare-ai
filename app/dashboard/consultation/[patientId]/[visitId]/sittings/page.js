@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { getDoctorContext } from '@/lib/auth-helpers'
 import ConsultationLayout from '@/components/consultation/ConsultationLayout'
 import SittingsScreen from '@/components/consultation/SittingsScreen'
 
@@ -8,68 +8,61 @@ export default async function SittingsPage(props) {
   const params = await props.params
   const { patientId, visitId } = params
 
-  const [{ userId }, patient, visit] = await Promise.all([
-    auth(),
-    db.patient.findUnique({
-      where: { id: patientId },
+  const { clinicId } = await getDoctorContext()
+  if (!clinicId) redirect('/sign-in')
+
+  const [patient, visit] = await Promise.all([
+    db.patient.findFirst({
+      where: { id: patientId, clinicId },
       select: {
-        id: true,
-        name: true,
-        age: true,
-        gender: true,
-        mobile: true,
-        originalID: true,
-        dentalHistory: true,
-        personalHistory: true,
-      }
+        id: true, name: true, age: true, gender: true, mobile: true,
+        originalID: true, dentalHistory: true, personalHistory: true,
+      },
     }),
-    db.visit.findUnique({
-      where: { id: visitId },
+    db.visit.findFirst({
+      where: { id: visitId, clinicId },
       include: {
         medicalHistory: true,
         treatmentPlan: {
-          include: {
-            treatmentItems: true
-          }
-        }
-      }
+          include: { treatmentItems: true },
+        },
+      },
     }),
   ])
 
   if (!patient || !visit) notFound()
 
-  // Only consented TreatmentItems
+  // Only consented TreatmentItems are eligible for sittings
   const consentedItems = visit.treatmentPlan?.treatmentItems?.filter(
     function(i) { return i.consentStatus === 'SIGNED' }
   ) || []
-
   const consentedItemIds = consentedItems.map(function(i) { return i.id })
 
-  // Fetch sittings and receipts in parallel
+  // Fetch sittings + receipts (clinic-scoped — receipts already have clinicId)
   const [sittings, receipts] = await Promise.all([
-    db.sitting.findMany({
-      where: { treatmentId: { in: consentedItemIds } },
-      orderBy: { date: 'desc' }
-    }),
+    consentedItemIds.length > 0
+      ? db.sitting.findMany({
+          where: { treatmentId: { in: consentedItemIds }, clinicId },
+          orderBy: { date: 'desc' },
+        })
+      : Promise.resolve([]),
     db.receipt.findMany({
-      where: { patientId },
+      where: { patientId, clinicId },
       include: { allocations: true },
       orderBy: { date: 'desc' },
       take: 20,
     }),
   ])
 
-  // Attach sittings to their TreatmentItem
+  // Attach sittings to their TreatmentItem for the screen
   const itemsWithSittings = consentedItems.map(function(item) {
     return {
       ...item,
-      sittings: sittings.filter(function(s) {
-        return s.treatmentId === item.id
-      })
+      sittings: sittings.filter(function(s) { return s.treatmentId === item.id }),
     }
   })
 
-  // Wallet calculations
+  // Wallet calculations — defensive defaults so undefined never reaches the UI
   const totalEstimate = consentedItems.reduce(function(s, i) {
     return s + (i.estimatedCost || 0)
   }, 0)
@@ -93,6 +86,7 @@ export default async function SittingsPage(props) {
     >
       <SittingsScreen
         patient={patient}
+        visit={visit}
         visitId={visitId}
         patientId={patientId}
         items={itemsWithSittings}

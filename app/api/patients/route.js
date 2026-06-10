@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
+import { getDoctorContext, unauthorized } from '@/lib/auth-helpers'
+import { nextCounter, formatPatientId } from '@/lib/counter'
 
 export async function POST(request) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { clinicId, doctorId } = await getDoctorContext()
+    if (!clinicId) return unauthorized()
 
     const body = await request.json()
     const {
@@ -19,57 +18,50 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Name, age, gender and mobile are required' }, { status: 400 })
     }
 
-    const doctor = await db.doctor.findFirst({
-      where: { clerkId: userId },
-    })
+    // Race-free patient-number generation per clinic
+    const seq = await nextCounter(clinicId, 'PATIENT')
+    const originalID = formatPatientId(seq)
 
-    if (!doctor) {
-      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
-    }
-
-    // Generate patient ID in ORK-001 format
-    const count = await db.patient.count({
-      where: { clinicId: doctor.clinicId },
-    })
-    const originalID = 'ORK-' + String(count + 1).padStart(3, '0')
-
-    const patient = await db.patient.create({
-      data: {
-        clinicId: doctor.clinicId,
-        name: name.trim(),
-        age: parseInt(age),
-        gender,
-        mobile: mobile.trim(),
-        address: address?.trim() || null,
-        abhaId: abhaId?.trim() || null,
-        originalID,
-        dentalHistory: dentalHistory || {},
-        personalHistory: personalHistory || {},
-      },
-    })
-
-    // If medical history provided at registration, store it against a visit
-    if (medicalHistory?.conditions || medicalHistory?.allergies || medicalHistory?.medications) {
-      const visit = await db.visit.create({
+    // Patient + optional visit/history wrapped in a transaction
+    const patient = await db.$transaction(async (tx) => {
+      const created = await tx.patient.create({
         data: {
-          clinicId: doctor.clinicId,
-          patientId: patient.id,
-          doctorId: doctor.id,
-          status: 'REGISTERED',
+          clinicId,
+          name: name.trim(),
+          age: parseInt(age),
+          gender,
+          mobile: mobile.trim(),
+          address: address?.trim() || null,
+          abhaId: abhaId?.trim() || null,
+          originalID,
+          dentalHistory: dentalHistory || {},
+          personalHistory: personalHistory || {},
         },
       })
 
-      await db.medicalHistory.create({
-        data: {
-          visitId: visit.id,
-          chiefComplaint: 'Recorded at registration',
-          conditions: medicalHistory.conditions || [],
-          allergies: medicalHistory.allergies || [],
-          medications: medicalHistory.medications || [],
-          collectedBy: 'registration',
-        },
-      })
-    }
+      if (medicalHistory?.conditions || medicalHistory?.allergies || medicalHistory?.medications) {
+        const visit = await tx.visit.create({
+          data: {
+            clinicId,
+            patientId: created.id,
+            doctorId,
+            status: 'REGISTERED',
+          },
+        })
+        await tx.medicalHistory.create({
+          data: {
+            visitId: visit.id,
+            chiefComplaint: 'Recorded at registration',
+            conditions: medicalHistory.conditions || [],
+            allergies: medicalHistory.allergies || [],
+            medications: medicalHistory.medications || [],
+            collectedBy: 'registration',
+          },
+        })
+      }
+
+      return created
+    })
 
     return NextResponse.json({ patient }, { status: 201 })
 
@@ -81,22 +73,16 @@ export async function POST(request) {
 
 export async function GET(request) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { clinicId } = await getDoctorContext()
+    if (!clinicId) return unauthorized()
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
     const page = parseInt(searchParams.get('page') || '1')
     const limit = 50
 
-    const doctor = await db.doctor.findFirst({
-      where: { clerkId: userId },
-    })
-
     const where = {
-      clinicId: doctor.clinicId,
+      clinicId,
       ...(search ? {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -113,10 +99,7 @@ export async function GET(request) {
         take: limit,
         skip: (page - 1) * limit,
         include: {
-          visits: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
+          visits: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       }),
       db.patient.count({ where }),

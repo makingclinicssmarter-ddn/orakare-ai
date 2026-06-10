@@ -560,3 +560,18 @@ enum AppointmentStatus {
   CANCELLED
   NO_SHOW
 }
+
+// ─── CLINIC COUNTER (atomic sequence generation) ──────────────────────────────
+// Replaces the count()+1 pattern for Patient and Invoice numbers.
+// Push #1: prevents duplicate IDs under concurrent registrations / invoicing.
+
+model ClinicCounter {
+  id        String   @id @default(cuid())
+  clinicId  String
+  kind      String   // "PATIENT" | "INVOICE"
+  lastValue Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clinicId, kind])
+}

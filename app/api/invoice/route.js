@@ -1,22 +1,35 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
+import { getDoctorContext, verifyPatientAccess, unauthorized, forbidden } from '@/lib/auth-helpers'
+import { nextCounter, formatInvoiceNo } from '@/lib/counter'
 
 export async function POST(request) {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { clinicId } = await getDoctorContext()
+    if (!clinicId) return unauthorized()
 
     const body = await request.json()
-    const doctor = await db.doctor.findFirst({ where: { clerkId: userId } })
-    if (!doctor) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!body.patientId) {
+      return NextResponse.json({ error: 'patientId required' }, { status: 400 })
+    }
 
-    const count = await db.invoice.count({ where: { clinicId: doctor.clinicId } })
-    const invoiceNo = 'OKR-INV-' + String(count + 1).padStart(4, '0')
+    const patient = await verifyPatientAccess(body.patientId, clinicId)
+    if (!patient) return forbidden('Patient not in your clinic')
+
+    // Fetch clinic for invoice prefix (parallelize with counter increment)
+    const [clinic, seq] = await Promise.all([
+      db.clinic.findUnique({
+        where: { id: clinicId },
+        select: { invoicePrefix: true },
+      }),
+      nextCounter(clinicId, 'INVOICE'),
+    ])
+
+    const invoiceNo = formatInvoiceNo(clinic?.invoicePrefix || 'OKR', seq)
 
     const invoice = await db.invoice.create({
       data: {
-        clinicId: doctor.clinicId,
+        clinicId,
         patientId: body.patientId,
         invoiceNo,
         date: new Date(body.date + 'T00:00:00+05:30'),
@@ -29,7 +42,7 @@ export async function POST(request) {
         notes: body.notes || null,
         status: body.status || 'UNPAID',
         items: {
-          create: body.items.map(function(item) {
+          create: (body.items || []).map(function(item) {
             return {
               description: item.description,
               quantity: item.quantity,

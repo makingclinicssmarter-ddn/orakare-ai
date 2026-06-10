@@ -1,70 +1,84 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
+import {
+  getDoctorContext,
+  verifyVisitAccess,
+  verifyPatientAccess,
+  unauthorized,
+  forbidden,
+} from '@/lib/auth-helpers'
 
 export async function POST(request) {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { clinicId } = await getDoctorContext()
+    if (!clinicId) return unauthorized()
 
     const body = await request.json()
     const { treatmentItemId, patientId, visitId, date, description, notes, paid, payMode } = body
 
-    const doctor = await db.doctor.findFirst({ where: { clerkId: userId } })
-    if (!doctor) return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
-
-    // Create sitting linked to TreatmentItem
-    const sitting = await db.sitting.create({
-      data: {
-        treatmentId: treatmentItemId,
-        patientId,
-        clinicId: doctor.clinicId,
-        date: new Date(date),
-        description,
-        notes,
-        paid: paid || 0,
-        payMode,
-        done: true,
-      }
-    })
-
-    // If payment collected, create receipt and allocate to Treatment
-    if (paid > 0) {
-      // Find the Treatment record linked to this TreatmentItem
-      const treatment = await db.treatment.findFirst({
-        where: { treatmentItemId }
-      })
-
-      const receipt = await db.receipt.create({
-        data: {
-          clinicId: doctor.clinicId,
-          patientId,
-          amount: paid,
-          paymentMode: payMode,
-          notes: 'Sitting payment — ' + (description || ''),
-          date: new Date(date),
-        }
-      })
-
-      // Allocate to Treatment if it exists
-      if (treatment) {
-        await db.paymentAllocation.create({
-          data: {
-            receiptId: receipt.id,
-            treatmentId: treatment.id,
-            amount: paid,
-          }
-        })
-      }
-
-      // Update Treatment status to IN_PROGRESS
-      if (treatment) {
-        await db.treatment.update({
-          where: { id: treatment.id },
-          data: { status: 'IN_PROGRESS' }
-        })
-      }
+    if (!treatmentItemId || !patientId) {
+      return NextResponse.json({ error: 'treatmentItemId and patientId required' }, { status: 400 })
     }
+
+    // Verify patient + treatment item both belong to this clinic
+    const [patient, treatmentItem] = await Promise.all([
+      verifyPatientAccess(patientId, clinicId),
+      db.treatmentItem.findFirst({
+        where: { id: treatmentItemId, treatmentPlan: { visit: { clinicId } } },
+        select: { id: true },
+      }),
+    ])
+    if (!patient || !treatmentItem) {
+      return forbidden('Patient or treatment item not in your clinic')
+    }
+
+    if (visitId) {
+      const v = await verifyVisitAccess(visitId, clinicId)
+      if (!v) return forbidden('Visit not in your clinic')
+    }
+
+    const sitting = await db.$transaction(async (tx) => {
+      const created = await tx.sitting.create({
+        data: {
+          treatmentId: treatmentItemId,
+          patientId,
+          clinicId,
+          date: new Date(date),
+          description,
+          notes,
+          paid: paid || 0,
+          payMode,
+          done: true,
+        },
+      })
+
+      if (paid > 0) {
+        const treatment = await tx.treatment.findFirst({ where: { treatmentItemId } })
+
+        const receipt = await tx.receipt.create({
+          data: {
+            clinicId,
+            patientId,
+            amount: paid,
+            paymentMode: payMode,
+            notes: 'Sitting payment — ' + (description || ''),
+            date: new Date(date),
+          },
+        })
+
+        if (treatment) {
+          await tx.paymentAllocation.create({
+            data: { receiptId: receipt.id, treatmentId: treatment.id, amount: paid },
+          })
+          await tx.treatment.update({
+            where: { id: treatment.id },
+            data: { status: 'IN_PROGRESS' },
+          })
+        }
+      }
+
+      return created
+    })
 
     return NextResponse.json({ sitting }, { status: 201 })
 

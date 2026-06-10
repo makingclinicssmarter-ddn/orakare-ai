@@ -305,6 +305,35 @@ function RegisterForm({ doctor, onSuccess }) {
   )
 }
 
+// Shared helper: calls /api/consultation/start to get a visitId, then navigates
+// to the correct screen of the consultation flow. Replaces the previous broken
+// pattern of pushing to /dashboard/consultation/<patientId> with no visitId.
+async function startConsultation(router, patientId) {
+  try {
+    const res = await fetch('/api/consultation/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patientId })
+    })
+    if (!res.ok) {
+      alert('Failed to start consultation. Please try again.')
+      return
+    }
+    const data = await res.json()
+    const base = '/dashboard/consultation/' + patientId + '/' + data.visitId
+    const routes = {
+      start: base + '/start',
+      examination: base + '/examination',
+      treatment: base + '/treatment',
+      consent: base + '/consent',
+      sittings: base + '/sittings',
+    }
+    router.push(routes[data.goTo] || routes.start)
+  } catch (e) {
+    alert('Failed to start consultation. Please try again.')
+  }
+}
+
 function PatientRow({ patient }) {
   const router = useRouter()
   const lastVisit = patient.visits?.[0]
@@ -319,7 +348,7 @@ function PatientRow({ patient }) {
 
   return (
     <tr
-      onClick={function() { router.push('/dashboard/consultation/' + patient.id) }}
+      onClick={function() { startConsultation(router, patient.id) }}
       className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition"
     >
       <td className="py-3 px-4">
@@ -353,7 +382,7 @@ function PatientRow({ patient }) {
         <button
           onClick={function(e) {
             e.stopPropagation()
-            router.push('/dashboard/consultation/' + patient.id)
+            startConsultation(router, patient.id)
           }}
           className="text-xs bg-primary-700 text-white px-3 py-1.5 rounded-lg hover:bg-primary-800 transition"
         >
@@ -409,7 +438,7 @@ export default function PatientsPage({ doctor, recentPatients, totalCount }) {
           <div className="flex gap-3 justify-center">
             <button
               onClick={function() {
-                router.push('/dashboard/consultation/' + registered.id)
+                startConsultation(router, registered.id)
               }}
               className="bg-primary-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-800 transition"
             >
