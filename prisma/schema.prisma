@@ -54,6 +54,8 @@ model Doctor {
   clinic           Clinic            @relation(fields: [clinicId], references: [id])
   visits           Visit[]
   auditLogs        AuditLog[]
+
+  @@index([clinicId])
 }
 
 // ─── PATIENT ──────────────────────────────────────────────────────────────────
@@ -81,6 +83,10 @@ model Patient {
   invoices     Invoice[]
   receipts     Receipt[]
   appointments Appointment[]
+
+  @@index([clinicId])
+  @@index([clinicId, createdAt])
+  @@index([mobile])
 }
 
 // ─── VISIT ────────────────────────────────────────────────────────────────────
@@ -105,6 +111,12 @@ model Visit {
   communications   Communication[]
   followUps        FollowUp[]
   clinic    Clinic   @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([clinicId, status])
+  @@index([clinicId, createdAt])
 }
 
 enum VisitStatus {
@@ -208,6 +220,9 @@ model TreatmentItem {
   followUps     FollowUp[]
   originalID String?
   sittings Sitting[]
+
+  @@index([treatmentPlanId])
+  @@index([consentStatus])
 }
 
 enum TreatmentUrgency {
@@ -256,6 +271,11 @@ model FollowUp {
   patient       Patient        @relation(fields: [patientId], references: [id])
   visit         Visit          @relation(fields: [visitId], references: [id])
   treatmentItem TreatmentItem? @relation(fields: [treatmentItemId], references: [id])
+
+  @@index([patientId])
+  @@index([visitId])
+  @@index([treatmentItemId])
+  @@index([status, dueDate])
 }
 
 enum FollowUpStatus {
@@ -278,6 +298,8 @@ model Communication {
   content   String?
 
   visit Visit @relation(fields: [visitId], references: [id])
+
+  @@index([visitId])
 }
 
 enum CommunicationType {
@@ -300,6 +322,10 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   doctor Doctor? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
 }
 // ─── TREATMENT (clinic treatment record, replaces Google Sheets Treatments) ───
 
@@ -330,6 +356,12 @@ model Treatment {
   consultant  Consultant? @relation(fields: [consultantId], references: [id])
   feeEntries  FeeEntry[]
   allocations      PaymentAllocation[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([visitId])
+  @@index([consultantId])
+  @@index([clinicId, status])
 }
 
 enum TreatmentStatus {
@@ -361,6 +393,11 @@ model Sitting {
   treatmentItem TreatmentItem @relation(fields: [treatmentId], references: [id])
   patient   Patient   @relation(fields: [patientId], references: [id])
   clinic    Clinic    @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([treatmentId])
+  @@index([clinicId, date])
 }
 
 // ─── INVOICE ──────────────────────────────────────────────────────────────────
@@ -387,6 +424,11 @@ model Invoice {
   items      InvoiceItem[]
   feeEntries FeeEntry[]
   receipts   Receipt[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([clinicId, date])
+  @@index([clinicId, status])
 }
 
 model InvoiceItem {
@@ -399,6 +441,8 @@ model InvoiceItem {
   createdAt   DateTime @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
 }
 
 enum InvoiceStatus {
@@ -425,6 +469,11 @@ model Receipt {
   patient     Patient              @relation(fields: [patientId], references: [id])
   invoice     Invoice?             @relation(fields: [invoiceId], references: [id])
   allocations PaymentAllocation[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([invoiceId])
+  @@index([clinicId, date])
 }
 
 model PaymentAllocation {
@@ -437,6 +486,9 @@ model PaymentAllocation {
 
   receipt     Receipt   @relation(fields: [receiptId], references: [id])
   treatment   Treatment @relation(fields: [treatmentId], references: [id])
+
+  @@index([receiptId])
+  @@index([treatmentId])
 }
 // ─── CONSULTANT ───────────────────────────────────────────────────────────────
 
@@ -457,6 +509,8 @@ model Consultant {
   clinic     Clinic     @relation(fields: [clinicId], references: [id])
   treatments Treatment[]
   feeEntries FeeEntry[]
+
+  @@index([clinicId])
 }
 
 // ─── FEE ENTRY (revenue split tracking) ──────────────────────────────────────
@@ -483,6 +537,12 @@ model FeeEntry {
   invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
   consultant  Consultant  @relation(fields: [consultantId], references: [id])
   treatment   Treatment?  @relation(fields: [treatmentId], references: [id])
+
+  @@index([clinicId])
+  @@index([consultantId])
+  @@index([invoiceId])
+  @@index([treatmentId])
+  @@index([clinicId, status])
 }
 
 enum FeeStatus {
@@ -510,6 +570,8 @@ model InventoryItem {
   updatedAt   DateTime @updatedAt
 
   clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
 }
 
 // ─── EXPENSE ──────────────────────────────────────────────────────────────────
@@ -529,6 +591,9 @@ model Expense {
   updatedAt   DateTime @updatedAt
 
   clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([clinicId, date])
 }
 
 // ─── APPOINTMENT ──────────────────────────────────────────────────────────────
@@ -551,6 +616,11 @@ model Appointment {
 
   clinic  Clinic   @relation(fields: [clinicId], references: [id])
   patient Patient? @relation(fields: [patientId], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([clinicId, date])
+  @@index([clinicId, status])
 }
 
 enum AppointmentStatus {
