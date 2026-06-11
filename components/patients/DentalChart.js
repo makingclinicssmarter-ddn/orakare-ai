@@ -252,8 +252,8 @@ export default function DentalChart({ patient, visitId, existing, onSaved }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-5 overflow-x-auto">
+        <div className="flex items-center justify-between mb-4 min-w-[600px]">
           <div>
             <h2 className="text-sm font-medium text-gray-700">
               Dental chart
