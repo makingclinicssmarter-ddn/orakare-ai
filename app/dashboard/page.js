@@ -114,12 +114,16 @@ export default async function DashboardPage() {
       where: { clinicId, date: { gte: twelveMonthsAgo } },
       select: { patientId: true, paid: true, date: true },
     }),
-    // Patient balances — just treatment items and patient id, no deep joins
-    db.treatmentPlan.findMany({
-      where: { visit: { clinicId } },
+    // Patient balances — fetch per-patient treatments + receipts so the
+    // sum here matches the per-patient Records page math (estimate - discount
+    // - collected via receipts). Identical formula across dashboard, balance
+    // verification page, and per-patient Records page so totals always agree.
+    db.patient.findMany({
+      where: { clinicId, archivedAt: null },
       select: {
-        visit: { select: { patientId: true } },
-        treatmentItems: { select: { estimatedCost: true } },
+        id: true,
+        treatments: { select: { estimate: true, discount: true } },
+        receipts: { select: { amount: true } },
       },
     }),
   ])
@@ -139,12 +143,16 @@ export default async function DashboardPage() {
     }
   })
 
-  // Total balance from treatment plans
-  const totalBalance = allPatientBalances.reduce(function(sum, plan) {
-    const patientId = plan.visit?.patientId
-    const est = plan.treatmentItems.reduce((s, t) => s + Number(t.estimatedCost || 0), 0)
-    const paid = paidByPatient[patientId] || 0
-    return sum + Math.max(0, est - paid)
+  // Total balance — sum of per-patient outstanding using the Records page formula.
+  // This number is what the /dashboard/balance page rows sum up to.
+  const totalBalance = allPatientBalances.reduce(function(sum, p) {
+    const estimate = p.treatments.reduce(function(s, t) {
+      return s + Number(t.estimate || 0) - Number(t.discount || 0)
+    }, 0)
+    const collected = p.receipts.reduce(function(s, r) {
+      return s + Number(r.amount || 0)
+    }, 0)
+    return sum + Math.max(0, estimate - collected)
   }, 0)
 
   // Overdue patients — last sitting > 30 days ago

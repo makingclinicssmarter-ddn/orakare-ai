@@ -182,21 +182,38 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — each links to a verification page so Dr. Shobhna can
+          audit the totals. Overdue card scrolls to the panel below. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.25rem' }}>
         {[
-          { label: 'This month', value: '₹' + monthRevenue.toLocaleString('en-IN'), sub: 'Expenses: ₹' + monthExpTotal.toLocaleString('en-IN'), bg: '#E1F5EE', border: '#9FE1CB', valColor: '#085041', subColor: '#0F6E56', icon: '💰' },
-          { label: 'Total patients', value: totalPatients, sub: activeTreatmentsCount + ' active treatments', bg: '#EEEDFE', border: '#CECBF6', valColor: '#3C3489', subColor: '#534AB7', icon: '👤' },
-          { label: 'Overdue patients', value: overdueCount, sub: 'Not seen in 30+ days', bg: '#FAEEDA', border: '#FAC775', valColor: '#633806', subColor: '#854F0B', icon: '🦷' },
-          { label: 'Balance pending', value: '₹' + balancePending.toLocaleString('en-IN'), sub: 'Across all patients', bg: '#FCEBEB', border: '#F7C1C1', valColor: '#A32D2D', subColor: '#A32D2D', icon: '⚖️' },
+          { label: 'This month', value: '₹' + monthRevenue.toLocaleString('en-IN'), sub: 'Expenses: ₹' + monthExpTotal.toLocaleString('en-IN'), bg: '#E1F5EE', border: '#9FE1CB', valColor: '#085041', subColor: '#0F6E56', icon: '💰', href: '/dashboard/finance' },
+          { label: 'Total patients', value: totalPatients, sub: activeTreatmentsCount + ' active treatments', bg: '#EEEDFE', border: '#CECBF6', valColor: '#3C3489', subColor: '#534AB7', icon: '👤', href: '/dashboard/patients' },
+          { label: 'Overdue patients', value: overdueCount, sub: 'Not seen in 30+ days', bg: '#FAEEDA', border: '#FAC775', valColor: '#633806', subColor: '#854F0B', icon: '🦷', href: '#overdue-panel' },
+          { label: 'Balance pending', value: '₹' + balancePending.toLocaleString('en-IN'), sub: 'Across all patients', bg: '#FCEBEB', border: '#F7C1C1', valColor: '#A32D2D', subColor: '#A32D2D', icon: '⚖️', href: '/dashboard/balance' },
         ].map(function(stat) {
           return (
-            <div key={stat.label} style={{ background: stat.bg, border: '0.5px solid ' + stat.border, borderRadius: '14px', padding: '1rem 1.1rem', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '18px', opacity: 0.7 }}>{stat.icon}</div>
-              <p style={{ fontSize: '11px', color: '#5F5E5A', marginBottom: '6px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{stat.label}</p>
-              <p style={{ fontSize: '22px', fontWeight: '500', color: stat.valColor }}>{stat.value}</p>
-              <p style={{ fontSize: '11px', color: stat.subColor, marginTop: '4px' }}>{stat.sub}</p>
-            </div>
+            <Link
+              key={stat.label}
+              href={stat.href}
+              scroll={stat.href.startsWith('#')}
+              style={{ textDecoration: 'none', display: 'block' }}
+            >
+              <div style={{ background: stat.bg, border: '0.5px solid ' + stat.border, borderRadius: '14px', padding: '1rem 1.1rem', position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'transform 120ms ease, box-shadow 120ms ease' }}
+                onMouseEnter={function(e) {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'
+                }}
+                onMouseLeave={function(e) {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              >
+                <div style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '18px', opacity: 0.7 }}>{stat.icon}</div>
+                <p style={{ fontSize: '11px', color: '#5F5E5A', marginBottom: '6px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{stat.label}</p>
+                <p style={{ fontSize: '22px', fontWeight: '500', color: stat.valColor }}>{stat.value}</p>
+                <p style={{ fontSize: '11px', color: stat.subColor, marginTop: '4px' }}>{stat.sub}</p>
+              </div>
+            </Link>
           )
         })}
       </div>
@@ -274,10 +291,10 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div style={{ background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-tertiary)', borderRadius: '14px', padding: '1.1rem 1.25rem' }}>
+        <div id="overdue-panel" style={{ background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-tertiary)', borderRadius: '14px', padding: '1.1rem 1.25rem', scrollMarginTop: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-text-primary)' }}>Overdue patients</p>
-            <Link href="/dashboard/records" style={{ fontSize: '11px', color: '#534AB7', textDecoration: 'none' }}>View all →</Link>
+            <Link href="/dashboard/patients" style={{ fontSize: '11px', color: '#534AB7', textDecoration: 'none' }}>All patients →</Link>
           </div>
           {overduePatients.length === 0 ? (
             <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', padding: '24px', textAlign: 'center' }}>No overdue patients</p>
