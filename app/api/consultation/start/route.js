@@ -1,53 +1,67 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import {
-  getDoctorContext,
-  verifyPatientAccess,
-  unauthorized,
-  forbidden,
-} from '@/lib/auth-helpers'
 
 export async function POST(request) {
   try {
-    const { clinicId, doctorId } = await getDoctorContext()
-    if (!clinicId) return unauthorized()
+    const { userId } = await auth()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
     const { patientId } = body
-    if (!patientId) return NextResponse.json({ error: 'patientId required' }, { status: 400 })
 
-    const patient = await verifyPatientAccess(patientId, clinicId)
-    if (!patient) return forbidden('Patient not in your clinic')
+    const doctor = await db.doctor.findFirst({ where: { clerkId: userId } })
+    if (!doctor) return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
 
-    // Resume an in-flight visit if there is one (clinic-scoped)
+    // Check for incomplete visit
     const incompleteVisit = await db.visit.findFirst({
       where: {
         patientId,
-        clinicId,
-        status: { notIn: ['COMPLETED'] },
+        status: {
+          notIn: ['COMPLETED']
+        }
       },
       include: {
-        treatmentPlan: { include: { treatmentItems: true } },
+        treatmentPlan: {
+          include: { treatmentItems: true }
+        }
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'desc' }
     })
 
     if (incompleteVisit) {
+      // Has consented treatment items → go to sittings
       const hasConsentedItems = incompleteVisit.treatmentPlan?.treatmentItems?.some(
         function(item) { return item.consentStatus === 'SIGNED' }
       )
+
       return NextResponse.json({
         visitId: incompleteVisit.id,
         resuming: true,
-        goTo: hasConsentedItems ? 'sittings' : getResumeScreen(incompleteVisit.status),
+        goTo: hasConsentedItems ? 'sittings' : getResumeScreen(incompleteVisit.status)
       })
     }
 
+    // Create new visit.
+    // Push #3: new visits start with needsResolution=true. The flag is cleared
+    // when the visit goes through the Close-visit screen. Visits with
+    // needsResolution=true that aren't COMPLETED trigger the force-resolve
+    // banner on the Records page.
     const visit = await db.visit.create({
-      data: { patientId, clinicId, doctorId, status: 'REGISTERED' },
+      data: {
+        patientId,
+        clinicId: doctor.clinicId,
+        doctorId: doctor.id,
+        status: 'REGISTERED',
+        needsResolution: true,
+      }
     })
 
-    return NextResponse.json({ visitId: visit.id, resuming: false, goTo: 'start' })
+    return NextResponse.json({
+      visitId: visit.id,
+      resuming: false,
+      goTo: 'start'
+    })
 
   } catch (error) {
     console.error('Consultation start error:', error)
@@ -57,12 +71,19 @@ export async function POST(request) {
 
 function getResumeScreen(status) {
   switch (status) {
-    case 'REGISTERED':              return 'start'
-    case 'HISTORY_TAKEN':           return 'examination'
-    case 'EXAM_CONSENT_SIGNED':     return 'examination'
-    case 'EXAMINATION_DONE':        return 'treatment'
-    case 'TREATMENT_PLANNED':       return 'consent'
-    case 'TREATMENT_CONSENT_SIGNED':return 'sittings'
-    default:                        return 'start'
+    case 'REGISTERED':
+      return 'start'
+    case 'HISTORY_TAKEN':
+      return 'examination'
+    case 'EXAM_CONSENT_SIGNED':
+      return 'examination'
+    case 'EXAMINATION_DONE':
+      return 'treatment'
+    case 'TREATMENT_PLANNED':
+      return 'consent'
+    case 'TREATMENT_CONSENT_SIGNED':
+      return 'sittings'
+    default:
+      return 'start'
   }
 }

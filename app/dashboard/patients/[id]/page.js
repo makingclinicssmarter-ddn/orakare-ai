@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { notFound, redirect } from 'next/navigation'
 import { getDoctorContext } from '@/lib/auth-helpers'
 import PatientHistoryActions from '@/components/patients/PatientHistoryActions'
+import UnresolvedVisitBanner from '@/components/visits/UnresolvedVisitBanner'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,19 @@ const VISIT_STATUS_LABEL = {
   TREATMENT_PLANNED: 'Treatment planned',
   TREATMENT_CONSENT_SIGNED: 'Treatment consent signed',
   COMPLETED: 'Completed',
+}
+
+// VisitOutcome labels — only set on visits closed via the new Close-visit screen (Push #3).
+const VISIT_OUTCOME_LABEL = {
+  ADVISED: 'Advised',
+  CONSENTED: 'Consented, deferred',
+  TREATED: 'Consented & treated',
+}
+
+const VISIT_OUTCOME_TONE = {
+  ADVISED: 'bg-amber-50 text-amber-800 border-amber-200',
+  CONSENTED: 'bg-blue-50 text-blue-800 border-blue-200',
+  TREATED: 'bg-green-50 text-green-800 border-green-200',
 }
 
 const TREATMENT_STATUS_TONE = {
@@ -113,6 +127,15 @@ export default async function PatientRecordsPage(props) {
   const inProgressVisit = patient.visits.find(function(v) { return v.status !== 'COMPLETED' })
   const isArchived = !!patient.archivedAt
 
+  // Push #3: visits that started but never reached the Close-visit screen.
+  // Day 1 ships the banner only; closing the visit lands on Day 3-4.
+  // Until then, the banner exists but the Close screen route 404s — that's
+  // fine because no NEW visits trigger this yet (only ones started after this
+  // ships and not closed via the new flow).
+  const unresolvedVisits = patient.visits
+    .filter(function(v) { return v.needsResolution === true && v.status !== 'COMPLETED' })
+    .map(function(v) { return { id: v.id, status: v.status, createdAt: v.createdAt } })
+
   // Treatments are the spine of the records page (mirrors her Google Sheet).
   // Each treatment may or may not have an associated TreatmentItem (older
   // treatments imported pre-treatmentItem may not). Each TreatmentItem holds
@@ -199,6 +222,8 @@ export default async function PatientRecordsPage(props) {
           Use the actions menu above to unarchive.
         </div>
       )}
+
+      <UnresolvedVisitBanner patientId={patient.id} unresolvedVisits={unresolvedVisits} />
 
       {inProgressVisit && !isArchived && (
         <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 flex items-center justify-between gap-3">
@@ -389,23 +414,63 @@ export default async function PatientRecordsPage(props) {
           <h2 className="text-sm font-medium text-slate-700 mb-3">Other activity</h2>
           <div className="space-y-2">
             {consultationOnlyVisits.map(function(v) {
+              const isCompleted = v.status === 'COMPLETED'
+              const hasOutcome = !!v.outcome
+              const outcomeLabel = hasOutcome ? VISIT_OUTCOME_LABEL[v.outcome] : null
+              const outcomeTone = hasOutcome ? VISIT_OUTCOME_TONE[v.outcome] : null
+
+              const body = (
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-slate-700">Visit</span>
+                      {hasOutcome ? (
+                        <span className={'text-[10px] px-2 py-0.5 rounded-full font-medium border ' + (outcomeTone || 'bg-slate-100 text-slate-700 border-slate-200')}>
+                          {outcomeLabel}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-700">
+                          {VISIT_STATUS_LABEL[v.status] || v.status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {v.medicalHistory?.chiefComplaint || (hasOutcome ? '' : 'No clinical record')}
+                    </div>
+                    {v.advice && (
+                      <div className="text-xs text-slate-600 mt-1">
+                        <span className="text-slate-400">Advice: </span>{v.advice}
+                      </div>
+                    )}
+                    {v.nextAppointmentDate && (
+                      <div className="text-xs text-slate-500 mt-1">
+                        <span className="text-slate-400">Next appt: </span>{formatDate(v.nextAppointmentDate)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-400 shrink-0">{formatDate(v.createdAt)}</div>
+                </div>
+              )
+
+              // COMPLETED visits — render as static card (Day 5 will link to prescription slip).
+              // Non-COMPLETED visits — render as Link to resume (Close screen if needsResolution=true, otherwise old consultation flow).
+              if (isCompleted) {
+                return (
+                  <div key={'visit-' + v.id} className="block bg-white rounded-lg border border-slate-200 px-4 py-3">
+                    {body}
+                  </div>
+                )
+              }
+              const href = v.needsResolution
+                ? '/dashboard/consultation/' + patient.id + '/' + v.id + '/close'
+                : '/dashboard/consultation/' + patient.id + '/' + v.id + '/start'
               return (
                 <Link
                   key={'visit-' + v.id}
-                  href={'/dashboard/consultation/' + patient.id + '/' + v.id + '/start'}
+                  href={href}
                   className="block bg-white rounded-lg border border-slate-200 px-4 py-3 hover:bg-slate-50 transition"
                 >
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div>
-                      <div className="text-sm font-medium text-slate-700">
-                        Visit · {VISIT_STATUS_LABEL[v.status] || v.status}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        {v.medicalHistory?.chiefComplaint || 'Consultation only — no treatment plan'}
-                      </div>
-                    </div>
-                    <div className="text-xs text-slate-400">{formatDate(v.createdAt)}</div>
-                  </div>
+                  {body}
                 </Link>
               )
             })}

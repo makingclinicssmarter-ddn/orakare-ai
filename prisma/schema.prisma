@@ -21,6 +21,12 @@ regNo            String?
 gstNo            String?
 googleReviewUrl  String?
 invoicePrefix    String?  @default("OKR")
+
+  // Push #3: charge presets for Close-visit screen.
+  // Format: [{ id, label, category, amount, active }]
+  // Categories: "CONSULTATION" | "RADIOGRAPH" | "OTHER" (free text allowed)
+  charges          Json     @default("[]")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -102,6 +108,12 @@ model Visit {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  // Push #3: visit-flow redesign
+  outcome             VisitOutcome?  // null for legacy/imported visits
+  advice              String?
+  nextAppointmentDate DateTime?
+  needsResolution     Boolean       @default(false)
+
   patient          Patient           @relation(fields: [patientId], references: [id])
   doctor           Doctor            @relation(fields: [doctorId], references: [id])
   medicalHistory   MedicalHistory?
@@ -119,6 +131,13 @@ model Visit {
   @@index([doctorId])
   @@index([clinicId, status])
   @@index([clinicId, createdAt])
+  @@index([clinicId, needsResolution])
+}
+
+enum VisitOutcome {
+  ADVISED    // examined ± plan, no consent today
+  CONSENTED  // consent signed, no sitting today (deferred)
+  TREATED    // consent + at least one sitting done today
 }
 
 enum VisitStatus {
