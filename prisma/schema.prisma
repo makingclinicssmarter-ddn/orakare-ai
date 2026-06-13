@@ -74,6 +74,7 @@ model Patient {
   personalHistory  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  archivedAt DateTime?
 
   clinic    Clinic    @relation(fields: [clinicId], references: [id])
   visits    Visit[]
@@ -86,6 +87,7 @@ model Patient {
 
   @@index([clinicId])
   @@index([clinicId, createdAt])
+  @@index([clinicId, archivedAt])
   @@index([mobile])
 }
 

@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDoctorContext } from '@/lib/auth-helpers'
 
+// Consultation search EXCLUDES archived patients (archivedAt IS NULL).
+// Archived patients should never be candidates for starting a new consultation.
+// If a dentist needs to access them, they go through the patient list with
+// the "Show archived" toggle on.
 export async function GET(request) {
   try {
     const { clinicId } = await getDoctorContext()
@@ -14,6 +18,7 @@ export async function GET(request) {
     const patients = await db.patient.findMany({
       where: {
         clinicId,
+        archivedAt: null,
         OR: [
           { name: { contains: q, mode: 'insensitive' } },
           { mobile: { contains: q } },

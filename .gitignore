@@ -44,3 +44,6 @@ next-env.d.ts
 .env
 orakare-share.zip
 orakare-push1.zip
+
+# Patient PII — never commit
+scripts/csv-imports/*.csv

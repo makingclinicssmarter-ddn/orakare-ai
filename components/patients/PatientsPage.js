@@ -34,9 +34,38 @@ function RegisterForm({ doctor, onSuccess }) {
     dentalHistory: [], personalHistory: [],
     otherCondition: '', otherAllergy: '',
   })
+  // Duplicate-mobile detection state.
+  // `dupePatient` is non-null when an existing patient with this mobile is found.
+  // `dupeDismissed` lets the user override the warning and proceed.
+  const [dupePatient, setDupePatient] = useState(null)
+  const [dupeChecking, setDupeChecking] = useState(false)
+  const [dupeDismissed, setDupeDismissed] = useState(false)
 
   function update(field, value) {
     setForm(function(p) { return { ...p, [field]: value } })
+    // Any edit to mobile invalidates the previous duplicate check
+    if (field === 'mobile') {
+      setDupePatient(null)
+      setDupeDismissed(false)
+    }
+  }
+
+  async function checkMobile(mobile) {
+    const cleaned = (mobile || '').trim()
+    if (cleaned.length < 6) return
+    setDupeChecking(true)
+    try {
+      const res = await fetch('/api/patients/check-mobile?mobile=' + encodeURIComponent(cleaned))
+      if (res.ok) {
+        const data = await res.json()
+        if (data.exists) setDupePatient(data.patient)
+        else setDupePatient(null)
+      }
+    } catch (e) {
+      // network errors silently — don't block registration on a check failure
+    } finally {
+      setDupeChecking(false)
+    }
   }
 
   function toggleArray(field, value) {
@@ -163,9 +192,48 @@ function RegisterForm({ doctor, onSuccess }) {
                 type="tel"
                 value={form.mobile}
                 onChange={function(e) { update('mobile', e.target.value) }}
+                onBlur={function(e) { checkMobile(e.target.value) }}
                 placeholder="+91"
                 className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
               />
+              {/* Duplicate warning — informational, doesn't block submit */}
+              {dupePatient && !dupeDismissed && (
+                <div className={
+                  'mt-2 rounded-lg border px-3 py-2 text-xs ' +
+                  (dupePatient.archivedAt
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-orange-200 bg-orange-50 text-orange-900')
+                }>
+                  <div className="font-medium mb-1">
+                    {dupePatient.archivedAt
+                      ? 'A patient with this mobile already exists (archived)'
+                      : 'A patient with this mobile already exists'}
+                  </div>
+                  <div className="text-slate-700">
+                    {dupePatient.name}
+                    {dupePatient.originalID ? ' · ' + dupePatient.originalID : ''}
+                    {' · '}{dupePatient.age}y · {dupePatient.gender}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <a
+                      href={'/dashboard/patients/' + dupePatient.id}
+                      className="text-xs px-3 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    >
+                      Open existing
+                    </a>
+                    <button
+                      type="button"
+                      onClick={function() { setDupeDismissed(true) }}
+                      className="text-xs px-3 py-1 rounded text-slate-600 hover:bg-slate-100"
+                    >
+                      Continue anyway
+                    </button>
+                  </div>
+                </div>
+              )}
+              {dupeChecking && !dupePatient && (
+                <p className="text-xs text-slate-400 mt-1">Checking…</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">ABHA ID <span className="text-slate-300 normal-case font-normal">optional</span></label>
@@ -337,6 +405,7 @@ async function startConsultation(router, patientId) {
 function PatientRow({ patient }) {
   const router = useRouter()
   const lastVisit = patient.visits?.[0]
+  const isArchived = !!patient.archivedAt
   const statusColors = {
     REGISTERED: 'bg-slate-100 text-slate-600',
     HISTORY_TAKEN: 'bg-blue-50 text-blue-700',
@@ -346,10 +415,20 @@ function PatientRow({ patient }) {
     COMPLETED: 'bg-green-50 text-green-700',
   }
 
+  // Row click ALWAYS goes to records page (active or archived).
+  // The "Start consultation" button — only on active rows — preserves the
+  // quick-action flow without making it the default for a row click.
+  function handleRowClick() {
+    router.push('/dashboard/patients/' + patient.id)
+  }
+
   return (
     <tr
-      onClick={function() { startConsultation(router, patient.id) }}
-      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition"
+      onClick={handleRowClick}
+      className={
+        'border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition ' +
+        (isArchived ? 'opacity-60' : '')
+      }
     >
       <td className="py-3 px-4">
         <div className="flex items-center gap-3">
@@ -357,7 +436,14 @@ function PatientRow({ patient }) {
             {patient.name.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div className="text-sm font-medium text-slate-900">{patient.name}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium text-slate-900">{patient.name}</div>
+              {isArchived && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-medium">
+                  Archived
+                </span>
+              )}
+            </div>
             <div className="text-xs text-slate-400">{patient.originalID}</div>
           </div>
         </div>
@@ -375,31 +461,53 @@ function PatientRow({ patient }) {
       </td>
       <td className="py-3 px-4 text-xs text-slate-400">
         {lastVisit
-          ? new Date(lastVisit.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-          : new Date(patient.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+          ? new Date(lastVisit.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
+          : new Date(patient.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
       </td>
       <td className="py-3 px-4">
-        <button
-          onClick={function(e) {
-            e.stopPropagation()
-            startConsultation(router, patient.id)
-          }}
-          className="text-xs bg-primary-700 text-white px-3 py-1.5 rounded-lg hover:bg-primary-800 transition"
-        >
-          Start consultation
-        </button>
+        {isArchived ? (
+          <button
+            onClick={function(e) {
+              e.stopPropagation()
+              router.push('/dashboard/patients/' + patient.id)
+            }}
+            className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition"
+          >
+            View
+          </button>
+        ) : (
+          <button
+            onClick={function(e) {
+              e.stopPropagation()
+              startConsultation(router, patient.id)
+            }}
+            className="text-xs bg-primary-700 text-white px-3 py-1.5 rounded-lg hover:bg-primary-800 transition"
+            title="Start a new consultation visit"
+          >
+            Start consultation
+          </button>
+        )}
       </td>
     </tr>
   )
 }
 
-export default function PatientsPage({ doctor, recentPatients, totalCount }) {
+export default function PatientsPage({ doctor, recentPatients, activeCount, archivedCount }) {
   const router = useRouter()
   const [tab, setTab] = useState('register')
   const [search, setSearch] = useState('')
   const [patients, setPatients] = useState(recentPatients)
   const [searching, setSearching] = useState(false)
   const [registered, setRegistered] = useState(null)
+  const [showArchived, setShowArchived] = useState(false)
+
+  // Apply the archived filter client-side. We fetched both active and archived
+  // patients in the server page, so toggling is instant — no round-trip.
+  const visiblePatients = showArchived
+    ? patients
+    : patients.filter(function(p) { return !p.archivedAt })
+
+  const totalCount = activeCount + archivedCount
 
   async function handleSearch(value) {
     setSearch(value)
@@ -463,7 +571,10 @@ export default function PatientsPage({ doctor, recentPatients, totalCount }) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-medium text-slate-900">Patients</h1>
-            <p className="text-sm text-slate-400 mt-0.5">{totalCount} total patients</p>
+            <p className="text-sm text-slate-400 mt-0.5">
+              {activeCount} active
+              {archivedCount > 0 ? ', +' + archivedCount + ' archived' : ''}
+            </p>
           </div>
         </div>
         {/* Tabs */}
@@ -502,7 +613,7 @@ export default function PatientsPage({ doctor, recentPatients, totalCount }) {
         {/* All patients tab */}
         {tab === 'all' && (
           <div>
-            <div className="mb-5">
+            <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
               <input
                 type="text"
                 value={search}
@@ -510,6 +621,17 @@ export default function PatientsPage({ doctor, recentPatients, totalCount }) {
                 placeholder="Search by name, mobile or patient ID..."
                 className="w-full max-w-md h-10 border border-slate-200 rounded-lg px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
               />
+              {archivedCount > 0 && (
+                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={function(e) { setShowArchived(e.target.checked) }}
+                    className="w-4 h-4 rounded border-slate-300 text-primary-700 focus:ring-primary-400"
+                  />
+                  Show archived ({archivedCount})
+                </label>
+              )}
             </div>
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               <table className="w-full">
@@ -526,10 +648,12 @@ export default function PatientsPage({ doctor, recentPatients, totalCount }) {
                 <tbody>
                   {searching ? (
                     <tr><td colSpan={6} className="py-8 text-center text-sm text-slate-400">Searching...</td></tr>
-                  ) : patients.length === 0 ? (
-                    <tr><td colSpan={6} className="py-8 text-center text-sm text-slate-400">No patients found</td></tr>
+                  ) : visiblePatients.length === 0 ? (
+                    <tr><td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                      {search ? 'No patients found' : (showArchived ? 'No patients' : 'No active patients')}
+                    </td></tr>
                   ) : (
-                    patients.map(function(p) {
+                    visiblePatients.map(function(p) {
                       return <PatientRow key={p.id} patient={p} />
                     })
                   )}
@@ -537,7 +661,10 @@ export default function PatientsPage({ doctor, recentPatients, totalCount }) {
               </table>
             </div>
             {!search && (
-              <p className="text-xs text-slate-400 mt-3">Showing most recent 50 patients · {totalCount} total</p>
+              <p className="text-xs text-slate-400 mt-3">
+                Showing {visiblePatients.length} of {totalCount} patients
+                {!showArchived && archivedCount > 0 ? ' · ' + archivedCount + ' archived hidden' : ''}
+              </p>
             )}
           </div>
         )}

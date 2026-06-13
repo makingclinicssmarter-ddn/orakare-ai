@@ -1,187 +1,107 @@
-# OraKare Push #1 — Security + Correctness
+# Push #2C — Setup Guide (revised)
 
-This drop fixes four critical issues identified in the v1 review:
+## What this push delivers
 
-1. **Multi-tenancy enforced everywhere.** Every API route and dashboard page now scopes data by `clinicId`. A new helper, `lib/auth-helpers.js`, exposes `getDoctorContext`, `verifyVisitAccess`, `verifyPatientAccess`, and `verifyTreatmentItemsAccess`.
-2. **`/api/invoice-print/[id]` is no longer public.** It now requires Clerk auth and clinic ownership.
-3. **Race-free patient and invoice numbering.** A new `ClinicCounter` model + `lib/counter.js` use Prisma's atomic `upsert + increment` so concurrent registrations cannot collide.
-4. **Clinical images are persisted.** A new `lib/storage.js` uploads images to Supabase Storage (private bucket `clinical-images`) and stores the path references in `ClinicalFindings.images`. The AI analysis route now authorises **before** any heavy work, validates image size/type, persists images in parallel, and retries Claude on transient errors.
+1. **Patient Records page** at `/dashboard/patients/[id]` — treatment-nested view
+   matching Dr. Shobhna's Google Sheet structure:
+   - Treatments listed top-level (sorted by start date, newest first)
+   - Sittings nested under each treatment (oldest first within a treatment)
+   - Each sitting shows: date, what was done, prescription, consumables, payment
+   - Planned-but-not-started treatments (consent signed, no Treatment row yet)
+     show as a separate dashed-border row inline
+   - "Other activity" section for consultation-only visits, standalone invoices,
+     and standalone receipts (advance payments)
+   - Financial summary cards: Treatments estimate, Invoiced, Collected, Pending
+     dues (or Credit balance if patient overpaid)
 
-## Deploy steps (in order)
+2. **Click behavior changed** — clicking a patient row in `/dashboard/patients`
+   now navigates to their Records page (not directly into consultation).
+   The "Start consultation" button on each row still works as a quick action.
+   Consultation entry from `/dashboard/consultation` search is unchanged —
+   that flow remains consultation-first.
 
-### 1. Drop the files in
+3. **Archive support** — Patient.archivedAt column + UI to archive/unarchive
+   from the Records page. Archived patients excluded from consultation search,
+   shown with reduced opacity in patient list, gated behind "Show archived"
+   toggle. Count display: "X active, +Y archived".
 
-Unzip the archive at the root of your Next.js project. It mirrors your existing layout — every file is either new (`lib/auth-helpers.js`, `lib/counter.js`, `lib/storage.js`, the migration folder) or a drop-in replacement for an existing route/page.
+4. **Duplicate mobile warning** during registration — when mobile field is
+   blurred, an API call checks for existing patients (active or archived) with
+   the same mobile. If found, inline warning with "Open existing" / "Continue
+   anyway" options.
 
-### 2. Install the Supabase client
+5. **ORK-044 cleanup** — SQL script archives the duplicate.
 
+## Deploy
+
+### 1. Drop files in
 ```bash
-npm install @supabase/supabase-js
+cd /path/to/orakare-ai
+cp -R ~/Downloads/orakare-push2c/. .
+git status
 ```
 
-(Or `pnpm add` / `yarn add` depending on your package manager.)
-
-### 3. Create the Supabase Storage bucket
-
-In the Supabase dashboard for your project:
-
-- Storage → New bucket
-- Name: **`clinical-images`**
-- Public bucket: **off** (private)
-- Save
-
-You do not need to write any RLS policies for the bucket. The server-side code uses the **service role key**, which bypasses RLS.
-
-### 4. Add the environment variable
-
-In your `.env.local` (and Vercel project settings):
-
-```
-SUPABASE_SERVICE_ROLE_KEY=<your service role key>
-```
-
-You should already have `NEXT_PUBLIC_SUPABASE_URL` set. The service role key is in the same Supabase dashboard under Settings → API → service_role secret. **Never expose this key to the client.** It is only imported in `lib/storage.js`, which is only ever used server-side.
-
-### 5. Run the migration
-
+### 2. Run migration locally
 ```bash
 npx prisma migrate deploy
-```
-
-This applies `20260610120000_add_clinic_counter`, which:
-
-- Creates the `ClinicCounter` table.
-- Backfills `lastValue` for each clinic from the current `Patient` and `Invoice` counts.
-
-For Dr. Shobhna's clinic with 44 patients, the backfill will set `PATIENT` `lastValue = 44`. The next call to `nextCounter()` returns 45 → `ORK-045`. No gaps, no collisions.
-
-### 6. Regenerate the Prisma client
-
-```bash
 npx prisma generate
 ```
 
-### 7. Verify before deploying to production
+### 3. Local smoke test
+Start `npm run dev`. Walk through:
 
-After running the migration locally, sanity check:
+- **Records view loads.** Open `/dashboard/patients` → click any patient with
+  treatments — should land on `/dashboard/patients/<id>` showing the
+  treatment-nested view.
+- **Sitting detail.** Expand a treatment — confirm sittings show prescription
+  and consumables when present.
+- **Empty patient.** Open a patient with no treatments — confirm empty-state
+  message ("No treatments recorded yet").
+- **In-progress visit.** Open a patient with an unfinished visit — confirm
+  "Consultation in progress" banner with Resume button.
+- **Duplicate mobile.** Try to register a new patient with mobile `9999999999`
+  (or any existing mobile) — confirm warning appears below the field.
+- **Archive flow.** From Records page → ⋯ menu → Archive — confirm banner
+  appears + patient excluded from consultation search.
+- **Show archived toggle.** Patient list → confirm toggle appears (if any
+  archived) and filters work.
+- **Click behavior.** Confirm patient row click goes to Records (not
+  consultation). Confirm "Start consultation" button still works for active
+  rows.
 
+### 4. Archive ORK-044
+After verifying #3 works, run `archive-ork-044.sql` in Supabase SQL Editor.
+
+### 5. Deploy
+```bash
+git add -A
+git commit -m "Push #2C: Records view + archive + duplicate-mobile warning"
+git push
+```
+
+Watch Vercel build. Build runs `prisma migrate deploy` automatically.
+
+### 6. Production check
+- Open one of Dr. Shobhna's real patients with treatment history → confirm
+  Records view renders with proper nesting.
+- Confirm financial summary shows reasonable numbers (estimate/invoiced/
+  collected/pending).
+- Confirm ORK-044 shows as archived (only with "Show archived" toggled).
+
+## Rollback
+Vercel Dashboard → Deployments → previous → Promote. The `archivedAt` column
+stays in DB harmlessly. To remove fully:
 ```sql
-SELECT "clinicId", "kind", "lastValue" FROM "ClinicCounter";
+ALTER TABLE "Patient" DROP COLUMN IF EXISTS "archivedAt";
+DROP INDEX IF EXISTS "Patient_clinicId_archivedAt_idx";
 ```
 
-The `lastValue` for `PATIENT` should equal `SELECT COUNT(*) FROM "Patient" WHERE "clinicId" = '<your clinic id>'`.
-
-Same for `INVOICE`.
-
-### 8. Smoke test
-
-After deploying:
-
-- Create a new patient — confirm the ID continues your existing sequence (e.g. `ORK-045`).
-- Create a new invoice — confirm same.
-- Run an AI image analysis — confirm in Supabase Storage that files appear under `clinics/<clinicId>/visits/<visitId>/`.
-- Try to access `/api/invoice-print/<some-invoice-id>` without logging in — should now return `401`.
-- (If you have any test account in a different clinic) Try to access a patient URL from a different clinic — should return 404 from `notFound()`.
-
-## What's NOT in this push
-
-These are intentionally deferred to Push #2 / #3 to keep this change reviewable:
-
-- **Indexes** on foreign keys. Schema is unchanged apart from adding `ClinicCounter`. Indexes go in Push #2.
-- **Clerk session claims** for doctorId/clinicId. Still one DB lookup per request via `getDoctorContext` for now.
-- **DB connection pool config.** Verify your `DATABASE_URL` is pointing at the Supabase pooled (pgbouncer) endpoint separately.
-- **AuditLog writes.** Schema-only for now. Push #3.
-- **AI streaming.** Retry logic is in; streaming is Push #2.
-
-## Files in this drop
-
-```
-lib/
-  auth-helpers.js              [NEW]
-  counter.js                   [NEW]
-  storage.js                   [NEW]
-
-prisma/
-  schema.prisma                [REPLACE — only adds ClinicCounter model at end]
-  migrations/
-    20260610120000_add_clinic_counter/
-      migration.sql            [NEW]
-
-app/api/
-  patients/route.js                                  [REPLACE]
-  patients/edit/route.js                             [REPLACE]
-  patients/[id]/ai-analysis/route.js                 [REPLACE]
-  patients/[id]/exam-consent/route.js                [REPLACE]
-  patients/[id]/examination/route.js                 [REPLACE]
-  patients/[id]/medical-history/route.js             [REPLACE]
-  patients/[id]/record/route.js                      [REPLACE]
-  patients/[id]/treatment-consent/route.js           [REPLACE]
-  patients/[id]/treatment-consent-bulk/route.js      [REPLACE]
-  patients/[id]/treatment-plan/route.js              [REPLACE]
-  invoice/route.js                                   [REPLACE]
-  invoice-print/[id]/route.js                        [REPLACE]
-  consultation/start/route.js                        [REPLACE]
-  consultation/search/route.js                       [REPLACE]
-  consultation/sitting/route.js                      [REPLACE]
-  consultation/collect-payment/route.js              [REPLACE]
-
-app/dashboard/
-  patients/[id]/page.js                                            [REPLACE]
-  patients/[id]/examination/page.js                                [REPLACE]
-  patients/[id]/treatment/page.js                                  [REPLACE]
-  patients/[id]/record/page.js                                     [REPLACE]
-  consultation/[patientId]/[visitId]/start/page.js                 [REPLACE]
-  consultation/[patientId]/[visitId]/examination/page.js           [REPLACE]
-  consultation/[patientId]/[visitId]/treatment/page.js             [REPLACE]
-  consultation/[patientId]/[visitId]/consent/page.js               [REPLACE]
-  consultation/[patientId]/[visitId]/sittings/page.js              [REPLACE]
-  consultation/[patientId]/[visitId]/summary/page.js               [REPLACE]
-```
-
-## Pattern reference
-
-For any future route you write, the canonical pattern is:
-
-```js
-import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { getDoctorContext, verifyVisitAccess, unauthorized, forbidden } from '@/lib/auth-helpers'
-
-export async function POST(request) {
-  const { clinicId } = await getDoctorContext()
-  if (!clinicId) return unauthorized()
-
-  const body = await request.json()
-
-  // Always verify any ID coming from the client belongs to this clinic
-  const visit = await verifyVisitAccess(body.visitId, clinicId)
-  if (!visit) return forbidden('Visit not in your clinic')
-
-  // Multi-step state changes wrapped in db.$transaction
-  const result = await db.$transaction(async (tx) => {
-    // ...
-  })
-
-  return NextResponse.json({ result }, { status: 200 })
-}
-```
-
-For server-component pages:
-
-```js
-import { getDoctorContext } from '@/lib/auth-helpers'
-import { notFound, redirect } from 'next/navigation'
-
-export default async function Page(props) {
-  const { clinicId } = await getDoctorContext()
-  if (!clinicId) redirect('/sign-in')
-
-  const record = await db.someModel.findFirst({
-    where: { id, clinicId },  // ← always clinic-scope
-    // ...
-  })
-  if (!record) notFound()
-
-  // ...
-}
-```
+## Known gaps (Push #3 will address)
+- Sittings unrelated to a treatment item can't be recorded today (e.g.
+  consultation fee + OTC inventory sale with no treatment plan).
+- Treatment.estimate is set at consent time; if Dr. Shobhna adjusts the price
+  later, the Records page reflects the new estimate but doesn't keep history of
+  the change. Need an audit/edit log for this.
+- Per-treatment "paid" is computed from sittings; doesn't include allocations
+  from standalone receipts. Acceptable for now since standalone-receipt
+  allocation isn't actively used.

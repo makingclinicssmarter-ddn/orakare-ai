@@ -1,22 +1,25 @@
 import { db } from '@/lib/db'
-import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
+import { getDoctorContext } from '@/lib/auth-helpers'
 import PatientsPage from '@/components/patients/PatientsPage'
 
 export default async function Page() {
-  const { userId } = await auth()
+  const ctx = await getDoctorContext()
+  if (!ctx.clinicId) redirect('/sign-in')
 
-  const doctor = await db.doctor.findFirst({
-    where: { clerkId: userId },
-  })
-
-  const [totalCount, recentPatients] = await Promise.all([
+  // Parallel: separate active vs archived counts, plus the patient list itself
+  // (including both active and archived — client filters by toggle).
+  const [activeCount, archivedCount, recentPatients] = await Promise.all([
     db.patient.count({
-      where: { clinicId: doctor.clinicId },
+      where: { clinicId: ctx.clinicId, archivedAt: null },
+    }),
+    db.patient.count({
+      where: { clinicId: ctx.clinicId, archivedAt: { not: null } },
     }),
     db.patient.findMany({
-      where: { clinicId: doctor.clinicId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+      where: { clinicId: ctx.clinicId },
+      orderBy: [{ archivedAt: 'asc' }, { createdAt: 'desc' }],
+      take: 100,
       include: {
         visits: {
           orderBy: { createdAt: 'desc' },
@@ -28,9 +31,10 @@ export default async function Page() {
 
   return (
     <PatientsPage
-      doctor={doctor}
+      doctor={{ id: ctx.userId }}
       recentPatients={recentPatients}
-      totalCount={totalCount}
+      activeCount={activeCount}
+      archivedCount={archivedCount}
     />
   )
 }
