@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getDoctorContext } from '@/lib/auth-helpers'
 import PatientHistoryActions from '@/components/patients/PatientHistoryActions'
 import UnresolvedVisitBanner from '@/components/visits/UnresolvedVisitBanner'
+import { computePatientFinances } from '@/lib/finance'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,19 +168,33 @@ export default async function PatientRecordsPage(props) {
 
   // ── Financials ──────────────────────────────────────────────────────────────
 
-  const totalEstimate = treatments.reduce(function(s, t) { return s + (t.estimate || 0) - (t.discount || 0) }, 0)
+  // Push #3.5 — two-stream finances. The helper splits payments into the
+  // treatment stream vs the visit-charges stream so visit-level invoices
+  // (consultation fees, X-rays, inventory) don't blur into treatment balance.
+  const finances = computePatientFinances(patient)
   const plannedEstimate = plannedNotStarted.reduce(function(s, ti) { return s + (ti.estimatedCost || 0) }, 0)
-  const totalInvoiced = patient.invoices.reduce(function(s, inv) { return s + (inv.total || 0) }, 0)
-  const totalCollected = patient.receipts.reduce(function(s, r) { return s + (r.amount || 0) }, 0)
-  const billingBasis = Math.max(totalEstimate + plannedEstimate, totalInvoiced)
-  const pendingDues = Math.max(0, billingBasis - totalCollected)
-  const creditBalance = Math.max(0, totalCollected - billingBasis)
 
-  // Per-treatment paid (sum of sitting.paid for that treatment's item)
+  // Per-treatment paid — Push #3.5: uses PaymentAllocation as the primary
+  // source of truth (the new dual-payment Close screen writes allocations,
+  // not sitting.paid). For historical data imported before Push #3.5,
+  // fall back to summing sitting.paid for treatments that have no
+  // allocations at all.
   const treatmentPaidMap = {}
   treatments.forEach(function(t) {
-    const sittings = t.treatmentItem?.sittings || []
-    treatmentPaidMap[t.id] = sittings.reduce(function(s, st) { return s + (st.paid || 0) }, 0)
+    let allocatedTotal = 0
+    patient.receipts.forEach(function(r) {
+      (r.allocations || []).forEach(function(a) {
+        if (a.treatmentId === t.id) allocatedTotal += Number(a.amount || 0)
+      })
+    })
+
+    if (allocatedTotal > 0) {
+      treatmentPaidMap[t.id] = allocatedTotal
+    } else {
+      // Legacy fallback for historical data (no allocations recorded)
+      const sittings = t.treatmentItem?.sittings || []
+      treatmentPaidMap[t.id] = sittings.reduce(function(s, st) { return s + (st.paid || 0) }, 0)
+    }
   })
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -242,31 +257,74 @@ export default async function PatientRecordsPage(props) {
         </div>
       )}
 
-      {/* Financial summary */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="text-xs text-slate-500">Treatments estimate</div>
-          <div className="text-lg font-medium text-slate-900 mt-1">{formatINR(totalEstimate + plannedEstimate)}</div>
-          {plannedEstimate > 0 && (
-            <div className="text-[10px] text-slate-400 mt-0.5">incl. {formatINR(plannedEstimate)} planned</div>
-          )}
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="text-xs text-slate-500">Invoiced</div>
-          <div className="text-lg font-medium text-slate-900 mt-1">{formatINR(totalInvoiced)}</div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="text-xs text-slate-500">Collected</div>
-          <div className="text-lg font-medium text-green-700 mt-1">{formatINR(totalCollected)}</div>
-        </div>
-        <div className={'rounded-xl border p-4 ' + (pendingDues > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200')}>
-          <div className={'text-xs ' + (pendingDues > 0 ? 'text-red-700' : 'text-slate-500')}>
-            {creditBalance > 0 ? 'Credit balance' : 'Pending dues'}
+      {/* Financial summary — two streams, deliberately separated.
+          Treatments stream = procedures + their tagged payments.
+          Visit charges stream = consultation fees / X-rays / inventory / etc. */}
+      <div className="mt-6 space-y-4">
+        {/* Treatments stream */}
+        <div>
+          <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Treatments</div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <div className="text-xs text-slate-500">Estimate</div>
+              <div className="text-lg font-medium text-slate-900 mt-1">{formatINR(finances.treatment.estimate + plannedEstimate)}</div>
+              {plannedEstimate > 0 && (
+                <div className="text-[10px] text-slate-400 mt-0.5">incl. {formatINR(plannedEstimate)} planned</div>
+              )}
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <div className="text-xs text-slate-500">Collected</div>
+              <div className="text-lg font-medium text-green-700 mt-1">{formatINR(finances.treatment.collected)}</div>
+            </div>
+            <div className={'rounded-xl border p-4 ' + (finances.treatment.balance > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200')}>
+              <div className={'text-xs ' + (finances.treatment.balance > 0 ? 'text-red-700' : 'text-slate-500')}>
+                {finances.treatment.credit > 0 ? 'Credit balance' : 'Pending dues'}
+              </div>
+              <div className={'text-lg font-medium mt-1 ' + (finances.treatment.balance > 0 ? 'text-red-700' : 'text-slate-900')}>
+                {formatINR(finances.treatment.credit > 0 ? finances.treatment.credit : finances.treatment.balance)}
+              </div>
+            </div>
           </div>
-          <div className={'text-lg font-medium mt-1 ' + (pendingDues > 0 ? 'text-red-700' : 'text-slate-900')}>
-            {formatINR(creditBalance > 0 ? creditBalance : pendingDues)}
-          </div>
         </div>
+
+        {/* Visit charges stream */}
+        {(finances.visitCharges.invoiced > 0 || finances.visitCharges.collected > 0) && (
+          <div>
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Visit charges (consultation, X-ray, dispensed items)</div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="text-xs text-slate-500">Invoiced</div>
+                <div className="text-lg font-medium text-slate-900 mt-1">{formatINR(finances.visitCharges.invoiced)}</div>
+              </div>
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="text-xs text-slate-500">Collected</div>
+                <div className="text-lg font-medium text-green-700 mt-1">{formatINR(finances.visitCharges.collected)}</div>
+              </div>
+              <div className={'rounded-xl border p-4 ' + (finances.visitCharges.balance > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200')}>
+                <div className={'text-xs ' + (finances.visitCharges.balance > 0 ? 'text-red-700' : 'text-slate-500')}>
+                  Balance
+                </div>
+                <div className={'text-lg font-medium mt-1 ' + (finances.visitCharges.balance > 0 ? 'text-red-700' : 'text-slate-900')}>
+                  {formatINR(finances.visitCharges.balance)}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unallocated payments — Push #3.5 */}
+        {finances.unallocated > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-sm font-medium text-amber-900">Unallocated payment: {formatINR(finances.unallocated)}</div>
+                <div className="text-xs text-amber-800 mt-0.5">
+                  Patient paid this without specifying which treatment. Open a treatment and use &quot;Apply unallocated&quot; to assign.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Treatments — the spine of the record */}
