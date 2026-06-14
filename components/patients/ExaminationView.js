@@ -35,11 +35,6 @@ export default function ExaminationView({ patient, visitId, existing, nextUrl })
 
   return (
     <div className="space-y-6">
-      {/*
-        Side-by-side only when there's genuine room (≥1600px).
-        Below that we stack — chart on top at comfortable width,
-        AI panel below. Avoids squeezing the chart on tablets/laptops.
-      */}
       <div className="grid grid-cols-1 min-[1600px]:grid-cols-2 gap-4">
         <DentalChart
           key={chartKey}
@@ -56,30 +51,46 @@ export default function ExaminationView({ patient, visitId, existing, nextUrl })
         />
       </div>
 
-      {/* Proceed bar — shown once findings are saved */}
-      <div className={`flex items-center justify-between rounded-xl border px-5 py-4 transition-all ${
+      {/* Action bar — Push #3: branch into Close visit OR Proceed to plan */}
+      <div className={`rounded-xl border px-5 py-4 transition-all ${
         examSaved
           ? 'border-green-200 bg-green-50'
           : 'border-gray-200 bg-gray-50'
       }`}>
-        <div>
-          {examSaved ? (
-            <p className="text-sm font-medium text-green-800">Examination findings saved</p>
-          ) : (
-            <p className="text-sm text-gray-500">Save findings in the chart to proceed</p>
-          )}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            {examSaved ? (
+              <p className="text-sm font-medium text-green-800">Examination findings saved</p>
+            ) : (
+              <p className="text-sm text-gray-500">Save findings in the chart to proceed</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => router.push(`/dashboard/consultation/${patient.id}/${visitId}/close`)}
+              disabled={!examSaved}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                examSaved
+                  ? 'border-slate-300 text-slate-700 hover:bg-slate-100 bg-white'
+                  : 'border-gray-200 text-gray-400 cursor-not-allowed bg-white'
+              }`}
+              title="End visit here — patient was examined but no treatment plan today"
+            >
+              Close visit
+            </button>
+            <button
+              onClick={() => router.push(nextUrl || `/dashboard/consultation/${patient.id}/${visitId}/treatment`)}
+              disabled={!examSaved}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                examSaved
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              Proceed to treatment plan →
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => router.push(nextUrl || `/dashboard/patients/${patient.id}/treatment`)}
-          disabled={!examSaved}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            examSaved
-              ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
-        >
-          Proceed to Treatment Planning →
-        </button>
       </div>
     </div>
   )

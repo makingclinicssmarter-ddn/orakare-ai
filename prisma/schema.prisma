@@ -437,6 +437,12 @@ model Invoice {
   paymentMode String?
   notes       String?
   status      InvoiceStatus @default(UNPAID)
+
+  // Push #3.5: distinguishes visit-charge invoices (consultation, X-ray,
+  // dispensed inventory) from treatment invoices (historical imports).
+  // The finance helper filters visit-charges section by kind.
+  kind        InvoiceKind   @default(VISIT_CHARGES)
+
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -450,6 +456,12 @@ model Invoice {
   @@index([patientId])
   @@index([clinicId, date])
   @@index([clinicId, status])
+  @@index([clinicId, kind])
+}
+
+enum InvoiceKind {
+  VISIT_CHARGES
+  TREATMENT
 }
 
 model InvoiceItem {

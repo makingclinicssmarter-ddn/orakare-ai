@@ -3,20 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-const URGENCY_COLORS = {
-  URGENT: 'bg-red-50 border-red-300 text-red-700',
-  SOON: 'bg-amber-50 border-amber-300 text-amber-700',
-  PLANNED: 'bg-blue-50 border-blue-300 text-blue-700',
-  MONITOR: 'bg-slate-100 border-slate-300 text-slate-600',
-}
-
-const URGENCY_LABELS = {
-  URGENT: 'Urgent',
-  SOON: 'Soon',
-  PLANNED: 'Planned',
-  MONITOR: 'Monitor',
-}
-
 const SERVICES = [
   'Free Dental Check-Up & X-Ray',
   'Scaling & Polishing',
@@ -31,7 +17,7 @@ const SERVICES = [
   'Other',
 ]
 
-export default function TreatmentPlan({ patient, visitId, findings, medicalHistory, existing, nextUrl }) {
+export default function TreatmentPlan({ patient, visitId, findings, medicalHistory, existing, existingAdvice, nextUrl }) {
   const router = useRouter()
   const [items, setItems] = useState(existing?.treatmentItems || [])
   const [generating, setGenerating] = useState(false)
@@ -42,6 +28,10 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
       ?.filter(function(i) { return i.consentStatus === 'SIGNED' })
       ?.map(function(i) { return i.id }) || []
   )
+  // Push #3: advice entered here pre-fills the Close-visit screen.
+  // Saved on its own endpoint so it survives back-navigation.
+  const [advice, setAdvice] = useState(existingAdvice || '')
+  const [adviceSaving, setAdviceSaving] = useState(false)
   const [newItem, setNewItem] = useState({
     procedureName: '',
     toothRef: '',
@@ -254,24 +244,6 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
 
             <div>
               <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-                Urgency
-              </div>
-              <select
-                value={newItem.urgency}
-                onChange={function(e) {
-                  setNewItem(function(p) { return { ...p, urgency: e.target.value } })
-                }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              >
-                <option value="URGENT">Urgent</option>
-                <option value="SOON">Soon</option>
-                <option value="PLANNED">Planned</option>
-                <option value="MONITOR">Monitor</option>
-              </select>
-            </div>
-
-            <div>
-              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">
                 Estimated cost (₹)
               </div>
               <input
@@ -324,7 +296,6 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
 
           <div className="space-y-2">
             {items.map(function(item, index) {
-              const urgencyColor = URGENCY_COLORS[item.urgency] || URGENCY_COLORS.PLANNED
               const isSelected = item.id && selectedForConsent.includes(item.id)
               return (
                 <div
@@ -356,9 +327,6 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
                     )}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span className={'text-xs px-2 py-0.5 rounded-full border font-medium ' + urgencyColor}>
-                          {URGENCY_LABELS[item.urgency]}
-                        </span>
                         {item.toothRef && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             Tooth {item.toothRef}
@@ -441,27 +409,72 @@ export default function TreatmentPlan({ patient, visitId, findings, medicalHisto
                 </div>
               )}
 
-              {/* Proceed button */}
-              <button
-                onClick={function() {
-                  if (selectedForConsent.length === 0) {
-                    alert('Please select at least one treatment to proceed with consent')
-                    return
+              {/* Push #3: advice text — persists to Visit.advice, pre-fills on Close screen */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                  Advice (will appear on prescription slip)
+                </label>
+                <textarea
+                  value={advice}
+                  onChange={function(e) { setAdvice(e.target.value) }}
+                  onBlur={async function() {
+                    setAdviceSaving(true)
+                    try {
+                      await fetch('/api/visits/' + visitId + '/advice', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ advice }),
+                      })
+                    } catch (e) { /* network error — user can re-enter on Close screen */ }
+                    finally { setAdviceSaving(false) }
+                  }}
+                  rows={2}
+                  placeholder="e.g. Warm saline rinses 3x/day for 5 days. Follow-up in 1 week."
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                {adviceSaving && <p className="text-xs text-slate-400 mt-1">Saving advice…</p>}
+              </div>
+
+              {/* Push #3: branching — Close visit OR Proceed to consent */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={async function() {
+                    // Save advice before navigating so it's preserved
+                    try {
+                      await fetch('/api/visits/' + visitId + '/advice', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ advice }),
+                      })
+                    } catch (e) { /* still proceed */ }
+                    router.push('/dashboard/consultation/' + patient.id + '/' + visitId + '/close')
+                  }}
+                  className="flex-1 border border-slate-300 text-slate-700 py-3 rounded-xl text-sm font-medium hover:bg-slate-50 transition bg-white"
+                  title="End visit — patient was given the plan but didn't consent today"
+                >
+                  Close visit (no consent)
+                </button>
+                <button
+                  onClick={function() {
+                    if (selectedForConsent.length === 0) {
+                      alert('Please select at least one treatment to proceed with consent')
+                      return
+                    }
+                    const selectedIds = selectedForConsent.join(',')
+                    router.push(
+                      (nextUrl || '/dashboard/patients/' + patient.id + '/consent') +
+                      '?selected=' + selectedIds
+                    )
+                  }}
+                  disabled={selectedForConsent.length === 0}
+                  className="flex-1 bg-primary-700 text-white py-3 rounded-xl text-sm font-medium hover:bg-primary-800 transition disabled:opacity-50"
+                >
+                  {selectedForConsent.length > 0
+                    ? 'Proceed to consent (' + selectedForConsent.length + ') →'
+                    : 'Select treatments to proceed →'
                   }
-                  const selectedIds = selectedForConsent.join(',')
-                  router.push(
-                    (nextUrl || '/dashboard/patients/' + patient.id + '/consent') +
-                    '?selected=' + selectedIds
-                  )
-                }}
-                disabled={selectedForConsent.length === 0}
-                className="w-full bg-primary-700 text-white py-3 rounded-xl text-sm font-medium hover:bg-primary-800 transition disabled:opacity-50"
-              >
-                {selectedForConsent.length > 0
-                  ? 'Proceed to consent for ' + selectedForConsent.length + ' treatment' + (selectedForConsent.length > 1 ? 's' : '') + ' →'
-                  : 'Select treatments to proceed →'
-                }
-              </button>
+                </button>
+              </div>
             </div>
           )}
         </div>

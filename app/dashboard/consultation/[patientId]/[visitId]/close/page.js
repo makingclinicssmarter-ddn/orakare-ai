@@ -10,30 +10,47 @@ export default async function CloseVisitPage(props) {
   const ctx = await getDoctorContext()
   if (!ctx.clinicId) redirect('/sign-in')
 
-  // Fetch visit + clinic charges in parallel.
-  // Visit fetch is clinic-scoped through the patient relation already loaded.
-  const [visit, clinic] = await Promise.all([
+  // Parallel fetch: visit + clinic + patient's active treatments with paid-so-far.
+  const [visit, clinic, activeTxs] = await Promise.all([
     db.visit.findFirst({
       where: { id: visitId, clinicId: ctx.clinicId, patientId: patientId },
       include: {
-        patient: {
-          select: { id: true, name: true, mobile: true, age: true, gender: true, originalID: true },
-        },
+        patient: { select: { id: true, name: true, mobile: true, age: true, gender: true, originalID: true } },
         treatmentPlan: { include: { treatmentItems: true } },
       },
     }),
-    db.clinic.findUnique({
-      where: { id: ctx.clinicId },
-      select: { id: true, charges: true },
+    db.clinic.findUnique({ where: { id: ctx.clinicId }, select: { id: true, charges: true } }),
+    db.treatment.findMany({
+      where: {
+        patientId, clinicId: ctx.clinicId,
+        status: { in: ['PLANNED', 'IN_PROGRESS'] },
+      },
+      include: {
+        treatmentItem: { select: { consentStatus: true } },
+        allocations: { select: { amount: true } },
+      },
+      orderBy: { createdAt: 'asc' },
     }),
   ])
 
   if (!visit) notFound()
 
   const presets = Array.isArray(clinic?.charges) ? clinic.charges.filter(function(c) { return c.active !== false }) : []
-
-  // Carry forward advice if it was entered on Plan screen
   const initialAdvice = visit.advice || ''
+
+  // Compute paid-so-far per treatment from PaymentAllocation
+  const activeTreatments = activeTxs.map(function(t) {
+    const paidSoFar = (t.allocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
+    return {
+      id: t.id,
+      type: t.type,
+      area: t.area,
+      estimate: t.estimate,
+      discount: t.discount,
+      paidSoFar,
+      status: t.status,
+    }
+  })
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -49,6 +66,7 @@ export default async function CloseVisitPage(props) {
         presets={presets}
         initialAdvice={initialAdvice}
         clinicId={ctx.clinicId}
+        activeTreatments={activeTreatments}
       />
     </div>
   )

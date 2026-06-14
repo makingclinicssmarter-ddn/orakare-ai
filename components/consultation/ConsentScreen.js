@@ -85,22 +85,69 @@ export default function ConsentScreen({ patient, visitId, patientId, items }) {
 
       {allConsented && (
         <div className="space-y-3">
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-            <p className="text-sm font-medium text-green-800">
-              Consent collected for all selected treatments
-            </p>
-            <p className="text-xs text-green-600 mt-1">
-              Treatment can now begin.
-            </p>
-          </div>
-          <button
-            onClick={function() {
-              router.push('/dashboard/consultation/' + patientId + '/' + visitId + '/sittings')
-            }}
-            className="w-full bg-primary-700 text-white py-3 rounded-xl text-sm font-medium hover:bg-primary-800 transition"
-          >
-            Proceed to sittings →
-          </button>
+          {(() => {
+            const hasAnySigned = itemState.some(function(i) { return i.consentStatus === 'SIGNED' })
+            const allDeclined = itemState.every(function(i) { return i.consentStatus === 'DECLINED' })
+
+            if (allDeclined) {
+              // Patient declined every treatment → ADVISED outcome
+              return (
+                <div className="space-y-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <p className="text-sm font-medium text-amber-800">
+                      All treatments declined
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      Close the visit to record advice and any charges given today.
+                    </p>
+                  </div>
+                  <button
+                    onClick={function() {
+                      router.push('/dashboard/consultation/' + patientId + '/' + visitId + '/close')
+                    }}
+                    className="w-full bg-amber-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-amber-700 transition"
+                  >
+                    Close visit →
+                  </button>
+                </div>
+              )
+            }
+
+            // At least one consent signed → branch into Start vs Schedule
+            return (
+              <div className="space-y-3">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                  <p className="text-sm font-medium text-green-800">
+                    Consent collected{hasAnySigned ? '' : ''}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1">
+                    Start treatment now, or schedule the first sitting for later.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={function() {
+                      // Schedule path: close visit with CONSENTED outcome.
+                      // Dr. Shobhna picks the next-appointment date on the Close screen.
+                      router.push('/dashboard/consultation/' + patientId + '/' + visitId + '/close')
+                    }}
+                    className="flex-1 border border-slate-300 text-slate-700 py-3 rounded-xl text-sm font-medium hover:bg-slate-50 transition bg-white"
+                    title="Sitting deferred — patient will return on a scheduled date"
+                  >
+                    Schedule (close visit)
+                  </button>
+                  <button
+                    onClick={function() {
+                      router.push('/dashboard/consultation/' + patientId + '/' + visitId + '/sittings')
+                    }}
+                    className="flex-1 bg-primary-700 text-white py-3 rounded-xl text-sm font-medium hover:bg-primary-800 transition"
+                  >
+                    Start treatment now →
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>

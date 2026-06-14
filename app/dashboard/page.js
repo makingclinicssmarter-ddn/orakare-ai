@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { auth } from '@clerk/nextjs/server'
 import DashboardView from '@/components/dashboard/DashboardView'
+import { computePatientFinances } from '@/lib/finance'
 
 export default async function DashboardPage() {
   const { userId } = await auth()
@@ -114,16 +115,22 @@ export default async function DashboardPage() {
       where: { clinicId, date: { gte: twelveMonthsAgo } },
       select: { patientId: true, paid: true, date: true },
     }),
-    // Patient balances — fetch per-patient treatments + receipts so the
-    // sum here matches the per-patient Records page math (estimate - discount
-    // - collected via receipts). Identical formula across dashboard, balance
-    // verification page, and per-patient Records page so totals always agree.
+    // Patient balances — fetch via the same data shape as the Records and
+    // Balance pages so the totals agree. The finance helper splits payments
+    // into treatment vs visit-charges streams.
     db.patient.findMany({
       where: { clinicId, archivedAt: null },
       select: {
         id: true,
         treatments: { select: { estimate: true, discount: true } },
-        receipts: { select: { amount: true } },
+        receipts: {
+          select: {
+            amount: true,
+            invoiceId: true,
+            allocations: { select: { id: true } },
+          },
+        },
+        invoices: { select: { total: true, balance: true, kind: true } },
       },
     }),
   ])
@@ -143,16 +150,12 @@ export default async function DashboardPage() {
     }
   })
 
-  // Total balance — sum of per-patient outstanding using the Records page formula.
-  // This number is what the /dashboard/balance page rows sum up to.
+  // Total balance — sum of per-patient outstanding using the shared finance
+  // helper. This matches the /dashboard/balance page totals and each patient's
+  // Records page math (treatment balance + visit-charges balance).
   const totalBalance = allPatientBalances.reduce(function(sum, p) {
-    const estimate = p.treatments.reduce(function(s, t) {
-      return s + Number(t.estimate || 0) - Number(t.discount || 0)
-    }, 0)
-    const collected = p.receipts.reduce(function(s, r) {
-      return s + Number(r.amount || 0)
-    }, 0)
-    return sum + Math.max(0, estimate - collected)
+    const fin = computePatientFinances(p)
+    return sum + fin.totalBalance
   }, 0)
 
   // Overdue patients — last sitting > 30 days ago

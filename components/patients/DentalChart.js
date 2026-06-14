@@ -6,27 +6,27 @@ import { useRouter } from 'next/navigation'
 const CONDITIONS = [
   { id: 'caries', label: 'Caries', color: 'bg-amber-100 border-amber-400 text-amber-800' },
   { id: 'missing', label: 'Missing', color: 'bg-gray-100 border-gray-400 text-gray-600' },
-  { id: 'rct', label: 'RCT done', color: 'bg-teal-100 border-teal-400 text-teal-800' },
-  { id: 'crown', label: 'Crown', color: 'bg-blue-100 border-blue-400 text-blue-800' },
+  { id: 'rct', label: 'RCT Treated', color: 'bg-teal-100 border-teal-400 text-teal-800' },
   { id: 'fracture', label: 'Fracture', color: 'bg-red-100 border-red-400 text-red-800' },
   { id: 'mobility', label: 'Mobility', color: 'bg-orange-100 border-orange-400 text-orange-800' },
   { id: 'sensitivity', label: 'Sensitivity', color: 'bg-purple-100 border-purple-400 text-purple-800' },
   { id: 'periapical', label: 'Periapical', color: 'bg-rose-100 border-rose-400 text-rose-800' },
   { id: 'erupting', label: 'Erupting', color: 'bg-cyan-100 border-cyan-400 text-cyan-800' },
   { id: 'healthy', label: 'Healthy', color: 'bg-green-100 border-green-400 text-green-800' },
+  { id: 'others', label: 'Others', color: 'bg-slate-100 border-slate-400 text-slate-700' },
 ]
 
 const TOOTH_COLORS = {
   caries: 'bg-amber-100 border-amber-400',
   missing: 'bg-gray-200 border-gray-400',
   rct: 'bg-teal-100 border-teal-400',
-  crown: 'bg-blue-100 border-blue-400',
   fracture: 'bg-red-100 border-red-400',
   mobility: 'bg-orange-100 border-orange-400',
   sensitivity: 'bg-purple-100 border-purple-400',
   periapical: 'bg-rose-100 border-rose-400',
   erupting: 'bg-cyan-100 border-cyan-400',
   healthy: 'bg-green-100 border-green-400',
+  others: 'bg-slate-100 border-slate-400',
 }
 
 const ADULT_UPPER_RIGHT = [18, 17, 16, 15, 14, 13, 12, 11]
@@ -252,8 +252,8 @@ export default function DentalChart({ patient, visitId, existing, onSaved }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-gray-200 p-5 overflow-x-auto">
-        <div className="flex items-center justify-between mb-4 min-w-[600px]">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-sm font-medium text-gray-700">
               Dental chart

@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getDoctorContext } from '@/lib/auth-helpers'
 import PatientHistoryActions from '@/components/patients/PatientHistoryActions'
 import UnresolvedVisitBanner from '@/components/visits/UnresolvedVisitBanner'
+import UnallocatedBanner from '@/components/patients/UnallocatedBanner'
 import { computePatientFinances } from '@/lib/finance'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -160,11 +161,12 @@ export default async function PatientRecordsPage(props) {
     return !r.allocations.some(function(a) { return treatmentIdSet.has(a.treatmentId) })
   })
 
-  // Visits without any consented treatment — purely consultative.
-  const consultationOnlyVisits = patient.visits.filter(function(v) {
-    const items = v.treatmentPlan?.treatmentItems || []
-    return items.length === 0 || items.every(function(ti) { return ti.consentStatus !== 'SIGNED' })
-  })
+  // Visits to show in "Other activity" — all visits.
+  // Push #3.5 Zip 2.1: previously this only included visits without consented
+  // treatments. That hid TREATED visits and made the Print prescription slip
+  // unreachable for them. Now we show every visit; the Treatments section
+  // separately shows treatment-level detail, so there's no real duplication.
+  const consultationOnlyVisits = patient.visits
 
   // ── Financials ──────────────────────────────────────────────────────────────
 
@@ -196,6 +198,32 @@ export default async function PatientRecordsPage(props) {
       treatmentPaidMap[t.id] = sittings.reduce(function(s, st) { return s + (st.paid || 0) }, 0)
     }
   })
+
+  // Push #3.5 Zip 2: data for ApplyUnallocatedModal.
+  //   unallocatedReceipts: receipts with no invoiceId and no allocations
+  //     (advance/unallocated payments parked at visit-close)
+  //   activeTreatments: PLANNED + IN_PROGRESS for this patient
+  const unallocatedReceipts = (patient.receipts || [])
+    .filter(function(r) {
+      const hasAllocations = Array.isArray(r.allocations) && r.allocations.length > 0
+      return !r.invoiceId && !hasAllocations && Number(r.amount) > 0
+    })
+    .map(function(r) { return { id: r.id, amount: r.amount, paymentMode: r.paymentMode, date: r.date } })
+
+  const activeTreatments = treatments
+    .filter(function(t) { return t.status === 'PLANNED' || t.status === 'IN_PROGRESS' })
+    .map(function(t) {
+      const est = (Number(t.estimate) || 0) - (Number(t.discount) || 0)
+      const paid = treatmentPaidMap[t.id] || 0
+      return {
+        id: t.id,
+        type: t.type,
+        area: t.area,
+        estimate: est,
+        paid,
+        balance: Math.max(0, est - paid),
+      }
+    })
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -312,19 +340,13 @@ export default async function PatientRecordsPage(props) {
           </div>
         )}
 
-        {/* Unallocated payments — Push #3.5 */}
-        {finances.unallocated > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <div className="text-sm font-medium text-amber-900">Unallocated payment: {formatINR(finances.unallocated)}</div>
-                <div className="text-xs text-amber-800 mt-0.5">
-                  Patient paid this without specifying which treatment. Open a treatment and use &quot;Apply unallocated&quot; to assign.
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Unallocated payments — Push #3.5 Zip 2: clickable + applies via modal */}
+        <UnallocatedBanner
+          unallocatedTotal={finances.unallocated}
+          unallocatedReceipts={unallocatedReceipts}
+          activeTreatments={activeTreatments}
+          patientId={patient.id}
+        />
       </div>
 
       {/* Treatments — the spine of the record */}
@@ -510,12 +532,22 @@ export default async function PatientRecordsPage(props) {
                 </div>
               )
 
-              // COMPLETED visits — render as static card (Day 5 will link to prescription slip).
+              // COMPLETED visits — render as static card with Print slip button.
               // Non-COMPLETED visits — render as Link to resume (Close screen if needsResolution=true, otherwise old consultation flow).
               if (isCompleted) {
                 return (
-                  <div key={'visit-' + v.id} className="block bg-white rounded-lg border border-slate-200 px-4 py-3">
+                  <div key={'visit-' + v.id} className="bg-white rounded-lg border border-slate-200 px-4 py-3">
                     {body}
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex justify-end">
+                      <a
+                        href={'/api/visits/' + v.id + '/prescription-slip'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+                      >
+                        Print prescription slip →
+                      </a>
+                    </div>
                   </div>
                 )
               }

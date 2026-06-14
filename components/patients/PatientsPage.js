@@ -373,35 +373,6 @@ function RegisterForm({ doctor, onSuccess }) {
   )
 }
 
-// Shared helper: calls /api/consultation/start to get a visitId, then navigates
-// to the correct screen of the consultation flow. Replaces the previous broken
-// pattern of pushing to /dashboard/consultation/<patientId> with no visitId.
-async function startConsultation(router, patientId) {
-  try {
-    const res = await fetch('/api/consultation/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patientId })
-    })
-    if (!res.ok) {
-      alert('Failed to start consultation. Please try again.')
-      return
-    }
-    const data = await res.json()
-    const base = '/dashboard/consultation/' + patientId + '/' + data.visitId
-    const routes = {
-      start: base + '/start',
-      examination: base + '/examination',
-      treatment: base + '/treatment',
-      consent: base + '/consent',
-      sittings: base + '/sittings',
-    }
-    router.push(routes[data.goTo] || routes.start)
-  } catch (e) {
-    alert('Failed to start consultation. Please try again.')
-  }
-}
-
 function PatientRow({ patient }) {
   const router = useRouter()
   const lastVisit = patient.visits?.[0]
@@ -415,9 +386,10 @@ function PatientRow({ patient }) {
     COMPLETED: 'bg-green-50 text-green-700',
   }
 
-  // Row click ALWAYS goes to records page (active or archived).
-  // The "Start consultation" button — only on active rows — preserves the
-  // quick-action flow without making it the default for a row click.
+  // Push #3.5: Row clicks navigate to Records page. New consultations are
+  // started ONLY from the Consultation tab in the sidebar — removing
+  // shortcut buttons here prevents confusing intermediate states when a
+  // user has just closed one visit and accidentally starts another.
   function handleRowClick() {
     router.push('/dashboard/patients/' + patient.id)
   }
@@ -465,28 +437,15 @@ function PatientRow({ patient }) {
           : new Date(patient.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
       </td>
       <td className="py-3 px-4">
-        {isArchived ? (
-          <button
-            onClick={function(e) {
-              e.stopPropagation()
-              router.push('/dashboard/patients/' + patient.id)
-            }}
-            className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition"
-          >
-            View
-          </button>
-        ) : (
-          <button
-            onClick={function(e) {
-              e.stopPropagation()
-              startConsultation(router, patient.id)
-            }}
-            className="text-xs bg-primary-700 text-white px-3 py-1.5 rounded-lg hover:bg-primary-800 transition"
-            title="Start a new consultation visit"
-          >
-            Start consultation
-          </button>
-        )}
+        <button
+          onClick={function(e) {
+            e.stopPropagation()
+            router.push('/dashboard/patients/' + patient.id)
+          }}
+          className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition"
+        >
+          View
+        </button>
       </td>
     </tr>
   )
@@ -546,11 +505,11 @@ export default function PatientsPage({ doctor, recentPatients, activeCount, arch
           <div className="flex gap-3 justify-center">
             <button
               onClick={function() {
-                startConsultation(router, registered.id)
+                router.push('/dashboard/patients/' + registered.id)
               }}
               className="bg-primary-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-800 transition"
             >
-              Start consultation
+              View patient
             </button>
             <button
               onClick={function() { setRegistered(null) }}

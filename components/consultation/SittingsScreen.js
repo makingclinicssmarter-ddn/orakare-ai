@@ -12,8 +12,6 @@ function TreatmentItemCard({ item, patientId, visitId, onSittingAdded }) {
     date: new Date().toISOString().slice(0, 10),
     description: '',
     notes: '',
-    paid: '',
-    payMode: 'Cash',
   })
 
   const sittings = item.sittings || []
@@ -41,8 +39,8 @@ function TreatmentItemCard({ item, patientId, visitId, onSittingAdded }) {
           date: form.date,
           description: form.description,
           notes: form.notes,
-          paid: parseFloat(form.paid) || 0,
-          payMode: form.payMode,
+          paid: 0,
+          payMode: null,
         }),
       })
       if (res.ok) {
@@ -52,8 +50,6 @@ function TreatmentItemCard({ item, patientId, visitId, onSittingAdded }) {
           date: new Date().toISOString().slice(0, 10),
           description: '',
           notes: '',
-          paid: '',
-          payMode: 'Cash',
         })
         onSittingAdded(item.id, data.sitting)
       } else {
@@ -159,30 +155,16 @@ function TreatmentItemCard({ item, patientId, visitId, onSittingAdded }) {
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
             Record sitting
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Date</div>
-              <input
-                type="date"
-                value={form.date}
-                onChange={function(e) {
-                  setForm(function(p) { return { ...p, date: e.target.value } })
-                }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"
-              />
-            </div>
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Payment collected (₹)</div>
-              <input
-                type="number"
-                placeholder="0"
-                value={form.paid}
-                onChange={function(e) {
-                  setForm(function(p) { return { ...p, paid: e.target.value } })
-                }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"
-              />
-            </div>
+          <div>
+            <div className="text-xs text-slate-400 mb-1">Date</div>
+            <input
+              type="date"
+              value={form.date}
+              onChange={function(e) {
+                setForm(function(p) { return { ...p, date: e.target.value } })
+              }}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"
+            />
           </div>
           <div>
             <div className="text-xs text-slate-400 mb-1">
@@ -199,34 +181,21 @@ function TreatmentItemCard({ item, patientId, visitId, onSittingAdded }) {
               autoFocus
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Payment mode</div>
-              <select
-                value={form.payMode}
-                onChange={function(e) {
-                  setForm(function(p) { return { ...p, payMode: e.target.value } })
-                }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"
-              >
-                {PAYMENT_MODES.map(function(m) {
-                  return <option key={m} value={m}>{m}</option>
-                })}
-              </select>
-            </div>
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Clinical notes</div>
-              <input
-                type="text"
-                placeholder="Optional..."
-                value={form.notes}
-                onChange={function(e) {
-                  setForm(function(p) { return { ...p, notes: e.target.value } })
-                }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"
-              />
-            </div>
+          <div>
+            <div className="text-xs text-slate-400 mb-1">Clinical notes (optional)</div>
+            <input
+              type="text"
+              placeholder="anything additional to log..."
+              value={form.notes}
+              onChange={function(e) {
+                setForm(function(p) { return { ...p, notes: e.target.value } })
+              }}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"
+            />
           </div>
+          <p className="text-xs text-slate-400 italic">
+            Payment is collected at visit close — not per sitting.
+          </p>
           <div className="flex gap-2 justify-end">
             <button
               onClick={function() { setOpen(false) }}
@@ -248,156 +217,6 @@ function TreatmentItemCard({ item, patientId, visitId, onSittingAdded }) {
   )
 }
 
-function WalletPanel({ patient, totalEstimate, totalReceipts, walletBalance, onPaymentAdded }) {
-  const [showForm, setShowForm] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({
-    amount: '',
-    paymentMode: 'Cash',
-    notes: '',
-  })
-
-  const totalDue = Math.max(0, totalEstimate - totalReceipts)
-
-  async function handleCollect() {
-    if (!form.amount || parseFloat(form.amount) <= 0) {
-      alert('Please enter a valid amount')
-      return
-    }
-    setSaving(true)
-    try {
-      const res = await fetch('/api/consultation/collect-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patientId: patient.id,
-          amount: parseFloat(form.amount),
-          paymentMode: form.paymentMode,
-          notes: form.notes,
-        }),
-      })
-      if (res.ok) {
-        setShowForm(false)
-        setForm({ amount: '', paymentMode: 'Cash', notes: '' })
-        onPaymentAdded(parseFloat(form.amount))
-      } else {
-        alert('Failed to record payment. Please try again.')
-      }
-    } catch (e) {
-      alert('Network error. Please try again.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
-      <h3 className="text-sm font-medium text-slate-700 mb-4">Patient wallet</h3>
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-slate-50 rounded-lg p-3">
-          <div className="text-xs text-slate-400 mb-1">Total estimate</div>
-          <div className="text-base font-medium text-slate-900">
-            ₹{totalEstimate.toLocaleString('en-IN')}
-          </div>
-        </div>
-        <div className="bg-green-50 rounded-lg p-3">
-          <div className="text-xs text-slate-400 mb-1">Total collected</div>
-          <div className="text-base font-medium text-green-700">
-            ₹{totalReceipts.toLocaleString('en-IN')}
-          </div>
-        </div>
-        <div className={totalDue > 0 ? 'bg-red-50 rounded-lg p-3' : 'bg-green-50 rounded-lg p-3'}>
-          <div className="text-xs text-slate-400 mb-1">Balance due</div>
-          <div className={'text-base font-medium ' + (totalDue > 0 ? 'text-red-700' : 'text-green-700')}>
-            ₹{totalDue.toLocaleString('en-IN')}
-          </div>
-        </div>
-      </div>
-
-      {walletBalance > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-          <p className="text-xs font-medium text-amber-800">
-            Unallocated balance: ₹{walletBalance.toLocaleString('en-IN')}
-          </p>
-          <p className="text-xs text-amber-600 mt-0.5">
-            Collected but not yet allocated to any treatment
-          </p>
-        </div>
-      )}
-
-      {!showForm ? (
-        <button
-          onClick={function() { setShowForm(true) }}
-          className="w-full border border-primary-700 text-primary-700 py-2 rounded-lg text-sm font-medium hover:bg-primary-50 transition"
-        >
-          + Collect payment
-        </button>
-      ) : (
-        <div className="space-y-3 border-t border-slate-100 pt-4">
-          <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-            Collect payment
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Amount (₹)</div>
-              <input
-                type="number"
-                placeholder="0"
-                value={form.amount}
-                onChange={function(e) {
-                  setForm(function(p) { return { ...p, amount: e.target.value } })
-                }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                autoFocus
-              />
-            </div>
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Mode</div>
-              <select
-                value={form.paymentMode}
-                onChange={function(e) {
-                  setForm(function(p) { return { ...p, paymentMode: e.target.value } })
-                }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-              >
-                {PAYMENT_MODES.map(function(m) {
-                  return <option key={m} value={m}>{m}</option>
-                })}
-              </select>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 mb-1">Notes (optional)</div>
-            <input
-              type="text"
-              placeholder="advance payment, partial payment..."
-              value={form.notes}
-              onChange={function(e) {
-                setForm(function(p) { return { ...p, notes: e.target.value } })
-              }}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-            />
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={function() { setShowForm(false) }}
-              className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCollect}
-              disabled={saving}
-              className="px-4 py-2 text-sm bg-primary-700 text-white rounded-lg hover:bg-primary-800 transition disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Collect ₹' + (form.amount || '0')}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function SittingsScreen({
   patient,
@@ -411,8 +230,11 @@ export default function SittingsScreen({
 }) {
   const router = useRouter()
   const [itemList, setItemList] = useState(items)
-  const [totalCollected, setTotalCollected] = useState(totalReceipts)
-  const [wallet, setWallet] = useState(walletBalance)
+
+  // Push #3.5 Zip 1.5: per-sitting payment is removed. Payment collection
+  // happens at visit close. The parent component still receives
+  // receipts/totalReceipts/walletBalance props for backward compatibility
+  // with the consultation page; they're no longer used here.
 
   function handleSittingAdded(itemId, newSitting) {
     setItemList(function(prev) {
@@ -424,14 +246,6 @@ export default function SittingsScreen({
         }
       })
     })
-    if (newSitting.paid > 0) {
-      setTotalCollected(function(p) { return p + newSitting.paid })
-    }
-  }
-
-  function handlePaymentAdded(amount) {
-    setTotalCollected(function(p) { return p + amount })
-    setWallet(function(p) { return p + amount })
   }
 
   return (
@@ -446,15 +260,6 @@ export default function SittingsScreen({
           </p>
         </div>
       </div>
-
-      {/* Wallet */}
-      <WalletPanel
-        patient={patient}
-        totalEstimate={totalEstimate}
-        totalReceipts={totalCollected}
-        walletBalance={wallet}
-        onPaymentAdded={handlePaymentAdded}
-      />
 
       {/* Treatment item cards */}
       {itemList.length === 0 ? (
@@ -482,32 +287,22 @@ export default function SittingsScreen({
         </div>
       )}
 
-      {/* End of visit actions */}
+      {/* Push #3: every visit ends at the Close screen. The Close screen
+          handles charges, payment, advice, next-appointment, and generates
+          the prescription slip. */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h3 className="text-sm font-medium text-slate-700 mb-1">Visit actions</h3>
+        <h3 className="text-sm font-medium text-slate-700 mb-1">Done with sittings for today?</h3>
         <p className="text-xs text-slate-500 mb-4">
-          End this visit or go back to start a new consultation
+          Close the visit to record charges, collect payment, and generate the prescription slip.
         </p>
-        <div className="flex gap-3">
-          <button
-            onClick={function() {
-              router.push(
-                '/dashboard/consultation/' + patientId + '/' + visitId + '/summary'
-              )
-            }}
-            className="flex-1 border border-primary-700 text-primary-700 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-50 transition"
-          >
-            Generate visit summary
-          </button>
-          <button
-            onClick={function() {
-              router.push('/dashboard/consultation')
-            }}
-            className="flex-1 bg-primary-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-primary-800 transition"
-          >
-            Back to consultation
-          </button>
-        </div>
+        <button
+          onClick={function() {
+            router.push('/dashboard/consultation/' + patientId + '/' + visitId + '/close')
+          }}
+          className="w-full bg-primary-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-primary-800 transition"
+        >
+          Close visit →
+        </button>
       </div>
 
     </div>

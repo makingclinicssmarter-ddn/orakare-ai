@@ -2,39 +2,19 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export default function PatientHistoryActions({ patientId, isArchived, hasInProgressVisit, inProgressVisitId }) {
+// Push #3.5: "Start consultation" button removed from this header.
+// Rationale: when transitioning out of a freshly-closed visit, this button
+// created a confusing intermediate state where invoice/balance figures could
+// briefly look wrong. New consultations now start ONLY from the Consultation
+// tab in the sidebar — single entry point, no confusion.
+//
+// The "Resume" button on the in-progress banner (rendered on the Records page
+// itself) still exists for in-flight visits and is unaffected.
+
+export default function PatientHistoryActions({ patientId, isArchived }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-
-  async function startConsultation() {
-    setBusy(true)
-    try {
-      const res = await fetch('/api/consultation/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patientId })
-      })
-      if (!res.ok) {
-        alert('Failed to start consultation. Please try again.')
-        setBusy(false)
-        return
-      }
-      const data = await res.json()
-      const base = '/dashboard/consultation/' + patientId + '/' + data.visitId
-      const routes = {
-        start: base + '/start',
-        examination: base + '/examination',
-        treatment: base + '/treatment',
-        consent: base + '/consent',
-        sittings: base + '/sittings',
-      }
-      router.push(routes[data.goTo] || routes.start)
-    } catch (e) {
-      alert('Failed to start consultation. Please try again.')
-      setBusy(false)
-    }
-  }
 
   async function toggleArchive() {
     const action = isArchived ? 'unarchive' : 'archive'
@@ -66,18 +46,6 @@ export default function PatientHistoryActions({ patientId, isArchived, hasInProg
 
   return (
     <div className="flex items-center gap-2">
-      {/* Start consultation — disabled if archived or in-progress (in-progress shows Resume in banner) */}
-      {!isArchived && !hasInProgressVisit && (
-        <button
-          onClick={startConsultation}
-          disabled={busy}
-          className="text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed font-medium"
-        >
-          {busy ? 'Starting…' : 'Start consultation'}
-        </button>
-      )}
-
-      {/* Overflow menu — archive/unarchive */}
       <div className="relative">
         <button
           onClick={function() { setMenuOpen(function(v) { return !v }) }}

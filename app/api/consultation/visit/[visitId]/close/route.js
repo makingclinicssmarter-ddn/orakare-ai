@@ -5,27 +5,36 @@ import { nextCounter, formatInvoiceNo } from '@/lib/counter'
 
 // POST /api/consultation/visit/[visitId]/close
 //
-// The atomic "close-visit" action. Body shape:
+// The atomic close-visit action — Push #3.5 redesign with dual payment streams.
+//
+// Body shape:
 //   {
 //     outcome: 'ADVISED' | 'CONSENTED' | 'TREATED',
 //     advice: string,
-//     charges: [{ label, category, amount, discount }],
-//     inventoryItems: [{ inventoryItemId, quantity, unitPrice, discount }],
-//     payment: { amount, mode } | null,
-//     totalDiscount: number,
-//     nextAppointment: { date: string ISO, slot?: string } | null
+//     visitCharges: {
+//       lines: [{ label, category, amount, discount }],
+//       inventoryItems: [{ inventoryItemId, name, quantity, unitPrice, discount }],
+//       totalDiscount: number,
+//       payment: { amount, mode } | null,
+//     },
+//     treatmentPayment: {
+//       totalAmount: number,
+//       mode: string,
+//       allocations: [{ treatmentId, amount }],   // empty array = don't allocate / advance
+//     } | null,
+//     nextAppointment: { date: ISO, slot? } | null,
 //   }
 //
-// What this endpoint does, all in one transaction:
-//   1. Update Visit: outcome, advice, nextAppointmentDate, needsResolution=false,
-//      status=COMPLETED.
-//   2. If there are any charges OR inventoryItems → create Invoice + InvoiceItems.
-//   3. If payment.amount > 0 → create Receipt (no PaymentAllocation since this
-//      may not map to a specific treatment).
-//   4. Decrement InventoryItem.stockQty for each dispensed item.
-//   5. If nextAppointment → create an Appointment row.
-//
-// On any failure the whole transaction rolls back.
+// What this does, in one transaction:
+//   1. Update Visit: outcome, advice, nextAppointmentDate, status=COMPLETED, needsResolution=false
+//   2. If visit charges exist → create Invoice (kind=VISIT_CHARGES) + InvoiceItems
+//   3. If visit-charge payment > 0 → Receipt with invoiceId, no allocations
+//   4. If treatment payment > 0 with allocations → Receipt + PaymentAllocations
+//   5. If treatment payment > 0 with NO allocations → Receipt with neither (unallocated advance)
+//   6. Decrement InventoryItem.stockQty
+//   7. Auto-transition any TreatmentItem's parent Treatment from PLANNED → IN_PROGRESS if not already
+//      (only for items consented in this visit's plan)
+//   8. Create Appointment row if nextApt set
 
 export async function POST(req, props) {
   const params = await props.params
@@ -41,42 +50,51 @@ export async function POST(req, props) {
     return NextResponse.json({ error: 'Invalid outcome' }, { status: 400 })
   }
 
-  // Verify the visit belongs to this clinic + grab patient name/phone for
-  // the Appointment record (Appointment.name is required even when a Patient
-  // is linked — schema legacy from walk-in support).
+  // Fetch visit + linked treatments (for lifecycle transitions)
   const visit = await db.visit.findFirst({
     where: { id: visitId, clinicId: ctx.clinicId },
     select: {
       id: true, patientId: true, doctorId: true, clinicId: true,
       patient: { select: { name: true, mobile: true } },
+      treatmentPlan: {
+        include: {
+          treatmentItems: {
+            select: { id: true, consentStatus: true, treatment: { select: { id: true, status: true } } }
+          }
+        }
+      }
     },
   })
   if (!visit) return notFoundResponse()
 
-  const charges = Array.isArray(body.charges) ? body.charges : []
-  const invItems = Array.isArray(body.inventoryItems) ? body.inventoryItems : []
-  const payment = body.payment && Number(body.payment.amount) > 0 ? body.payment : null
-  const totalDiscount = Number.isFinite(Number(body.totalDiscount)) ? Number(body.totalDiscount) : 0
+  // ---- Parse body ----
+  const vc = body.visitCharges || {}
+  const vcLines = Array.isArray(vc.lines) ? vc.lines : []
+  const vcInvItems = Array.isArray(vc.inventoryItems) ? vc.inventoryItems : []
+  const vcTotalDiscount = Number.isFinite(Number(vc.totalDiscount)) ? Number(vc.totalDiscount) : 0
+  const vcPayment = vc.payment && Number(vc.payment.amount) > 0 ? vc.payment : null
+
+  const tp = body.treatmentPayment
+  const hasTreatmentPayment = tp && Number(tp.totalAmount) > 0
+  const tpAllocations = (tp && Array.isArray(tp.allocations)) ? tp.allocations : []
+  const tpAllocationsTotal = tpAllocations.reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
+  const tpAmount = hasTreatmentPayment ? Number(tp.totalAmount) : 0
+  // Validate: allocations must not exceed payment amount.
+  if (hasTreatmentPayment && tpAllocationsTotal > tpAmount + 0.01) {
+    return NextResponse.json({ error: 'Allocations exceed treatment payment amount' }, { status: 400 })
+  }
+
   const nextApt = body.nextAppointment && body.nextAppointment.date ? body.nextAppointment : null
 
-  // Pre-compute invoice totals
-  const chargeLines = charges
+  // ---- Compute visit-charge invoice totals ----
+  const chargeLines = vcLines
     .filter(function(c) { return c && c.label && Number(c.amount) > 0 })
     .map(function(c) {
-      const qty = 1
       const gross = Number(c.amount)
       const disc = Number(c.discount) || 0
-      return {
-        description: c.label,
-        category: c.category || 'OTHER',
-        quantity: qty,
-        unitPrice: gross,
-        discount: disc,
-        total: Math.max(0, gross - disc),
-      }
+      return { description: c.label, quantity: 1, unitPrice: gross, discount: disc, total: Math.max(0, gross - disc) }
     })
-
-  const invLines = invItems
+  const invLines = vcInvItems
     .filter(function(i) { return i && i.inventoryItemId && Number(i.quantity) > 0 })
     .map(function(i) {
       const qty = Number(i.quantity)
@@ -91,27 +109,23 @@ export async function POST(req, props) {
         total: Math.max(0, (qty * price) - disc),
       }
     })
-
   const allLines = chargeLines.concat(invLines)
-  const subtotal = allLines.reduce(function(s, l) { return s + (l.quantity * l.unitPrice) }, 0)
-  const linewiseDiscount = allLines.reduce(function(s, l) { return s + l.discount }, 0)
-  const totalAfterLineDiscount = subtotal - linewiseDiscount
-  const grandTotal = Math.max(0, totalAfterLineDiscount - totalDiscount)
-  const paid = payment ? Number(payment.amount) : 0
-  const balance = grandTotal - paid
+  const vcSubtotal = allLines.reduce(function(s, l) { return s + (l.quantity * l.unitPrice) }, 0)
+  const vcLineDiscount = allLines.reduce(function(s, l) { return s + l.discount }, 0)
+  const vcTotal = Math.max(0, vcSubtotal - vcLineDiscount - vcTotalDiscount)
+  const vcPaid = vcPayment ? Number(vcPayment.amount) : 0
+  const vcBalance = vcTotal - vcPaid
 
-  // Counter increment is done OUTSIDE the transaction because our nextCounter
-  // helper doesn't accept a tx client (Push #4 todo). Worst case is a skipped
-  // invoice number if the transaction below fails — harmless gap, not duplicate.
+  // Counter increment outside transaction (acceptable race; gaps are harmless)
   let invoiceNo = null
-  if (chargeLines.length > 0 || invItems.length > 0) {
+  if (allLines.length > 0) {
     const seq = await nextCounter(ctx.clinicId, 'INVOICE')
     invoiceNo = formatInvoiceNo(null, seq)
   }
 
   try {
     const result = await db.$transaction(async function(tx) {
-      // 1. Update the visit
+      // 1. Update visit
       await tx.visit.update({
         where: { id: visitId },
         data: {
@@ -125,30 +139,31 @@ export async function POST(req, props) {
 
       let invoiceId = null
 
-      // 2. Create invoice if there are line items
+      // 2. Visit-charge invoice (kind=VISIT_CHARGES)
       if (allLines.length > 0) {
-        const invoice = await tx.invoice.create({
+        const inv = await tx.invoice.create({
           data: {
             clinicId: ctx.clinicId,
             patientId: visit.patientId,
             invoiceNo: invoiceNo,
+            kind: 'VISIT_CHARGES',
             date: new Date(),
-            subtotal: subtotal,
-            discount: linewiseDiscount + totalDiscount,
-            total: grandTotal,
-            paid: paid,
-            balance: balance,
-            paymentMode: payment ? payment.mode : null,
+            subtotal: vcSubtotal,
+            discount: vcLineDiscount + vcTotalDiscount,
+            total: vcTotal,
+            paid: vcPaid,
+            balance: vcBalance,
+            paymentMode: vcPayment ? vcPayment.mode : null,
             notes: 'Visit closed — outcome: ' + outcome,
-            status: paid >= grandTotal ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'UNPAID'),
+            status: vcPaid >= vcTotal ? 'PAID' : (vcPaid > 0 ? 'PARTIAL' : 'UNPAID'),
           },
         })
-        invoiceId = invoice.id
+        invoiceId = inv.id
 
         for (const line of allLines) {
           await tx.invoiceItem.create({
             data: {
-              invoiceId: invoice.id,
+              invoiceId: inv.id,
               description: line.description,
               quantity: line.quantity,
               unitPrice: line.unitPrice,
@@ -158,22 +173,51 @@ export async function POST(req, props) {
         }
       }
 
-      // 3. Receipt for payment
-      if (paid > 0) {
+      // 3. Visit-charge payment receipt
+      if (vcPaid > 0) {
         await tx.receipt.create({
           data: {
             clinicId: ctx.clinicId,
             patientId: visit.patientId,
-            amount: paid,
-            paymentMode: payment.mode || 'Cash',
-            notes: 'Visit close payment' + (invoiceId ? ' (invoice linked)' : ''),
+            amount: vcPaid,
+            paymentMode: vcPayment.mode || 'Cash',
+            notes: 'Visit charges payment',
             date: new Date(),
             invoiceId: invoiceId,
           },
         })
       }
 
-      // 4. Decrement inventory stock
+      // 4. Treatment payment receipt + allocations
+      if (hasTreatmentPayment) {
+        const tpReceipt = await tx.receipt.create({
+          data: {
+            clinicId: ctx.clinicId,
+            patientId: visit.patientId,
+            amount: tpAmount,
+            paymentMode: tp.mode || 'Cash',
+            notes: tpAllocations.length > 0
+              ? 'Treatment payment (' + tpAllocations.length + ' treatment' + (tpAllocations.length > 1 ? 's' : '') + ')'
+              : 'Treatment payment — unallocated',
+            date: new Date(),
+            invoiceId: null,
+          },
+        })
+
+        // Create PaymentAllocation rows for each allocation
+        for (const a of tpAllocations) {
+          if (!a.treatmentId || Number(a.amount) <= 0) continue
+          await tx.paymentAllocation.create({
+            data: {
+              receiptId: tpReceipt.id,
+              treatmentId: a.treatmentId,
+              amount: Number(a.amount),
+            },
+          })
+        }
+      }
+
+      // 5. Decrement inventory stock
       for (const i of invLines) {
         await tx.inventoryItem.update({
           where: { id: i.inventoryItemId },
@@ -181,7 +225,19 @@ export async function POST(req, props) {
         })
       }
 
-      // 5. Next appointment row
+      // 6. Treatment lifecycle: PLANNED → IN_PROGRESS for consented items in this visit
+      const consentedTreatmentIds = (visit.treatmentPlan?.treatmentItems || [])
+        .filter(function(ti) { return ti.consentStatus === 'SIGNED' && ti.treatment })
+        .map(function(ti) { return ti.treatment.id })
+
+      if (consentedTreatmentIds.length > 0 && outcome === 'TREATED') {
+        await tx.treatment.updateMany({
+          where: { id: { in: consentedTreatmentIds }, status: 'PLANNED' },
+          data: { status: 'IN_PROGRESS', startedAt: new Date() },
+        })
+      }
+
+      // 7. Appointment
       if (nextApt) {
         await tx.appointment.create({
           data: {
@@ -197,7 +253,7 @@ export async function POST(req, props) {
         })
       }
 
-      return { invoiceId, grandTotal, paid }
+      return { invoiceId, vcTotal, vcPaid, tpAmount }
     }, { maxWait: 10000, timeout: 30000 })
 
     return NextResponse.json({ ok: true, ...result })
