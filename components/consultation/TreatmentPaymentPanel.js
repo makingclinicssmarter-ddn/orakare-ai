@@ -24,33 +24,25 @@ export default function TreatmentPaymentPanel({
     setAllocations(activeTreatments.map(function(t) { return { treatmentId: t.id, amount: 0 } }))
   }, [activeTreatments])
 
-  // Auto-distribute the payment when:
-  //  - user types an amount AND
-  //  - the user hasn't checked "Don't allocate" AND
-  //  - no manual allocation has been entered yet (all rows currently 0)
-  //
-  // Strategy: dump everything onto the SINGLE active treatment when there's
-  // only one. When there are multiple, dump onto the first one with non-zero
-  // balance (it's a hint; she can re-split before saving).
-  useEffect(function() {
-    if (unallocated) return
+  // Push #3.5 Zip 2.2: removed the per-keystroke auto-fill effect that
+  // typed "1500" as four separate events and stuck the allocation at ₹1.
+  // Replaced with an explicit "Allocate full" button (rendered below the
+  // payment input). Predictable, fires once on click, doesn't surprise.
+
+  function allocateFullAmount() {
     if (!activeTreatments || activeTreatments.length === 0) return
     if (Number(amount) <= 0) return
-
-    const currentTotal = allocations.reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
-    if (currentTotal > 0) return  // user already manually allocated; don't override
-
     const target = activeTreatments.find(function(t) {
       const bal = (Number(t.estimate || 0) - Number(t.discount || 0)) - Number(t.paidSoFar || 0)
       return bal > 0
     }) || activeTreatments[0]
-
     setAllocations(function(curr) {
+      // Clear all and put full amount on the target
       return curr.map(function(a) {
-        return a.treatmentId === target.id ? { ...a, amount: Number(amount) } : a
+        return a.treatmentId === target.id ? { ...a, amount: Number(amount) } : { ...a, amount: 0 }
       })
     })
-  }, [amount, unallocated, activeTreatments])
+  }
 
   function updateAllocation(treatmentId, amt) {
     setAllocations(function(curr) {
@@ -165,6 +157,22 @@ export default function TreatmentPaymentPanel({
           </select>
         </div>
       </div>
+
+      {/* Allocate full amount — explicit, predictable. Replaces the broken
+          per-keystroke auto-fill that stuck the allocation at ₹1 when the
+          user typed "1500" digit-by-digit. */}
+      {Number(amount) > 0 && !unallocated && (
+        <button
+          type="button"
+          onClick={allocateFullAmount}
+          className="text-xs px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium self-start"
+        >
+          Allocate full ₹{Math.round(amount).toLocaleString('en-IN')} to {(activeTreatments.find(function(t) {
+            const bal = (Number(t.estimate || 0) - Number(t.discount || 0)) - Number(t.paidSoFar || 0)
+            return bal > 0
+          }) || activeTreatments[0]).type}
+        </button>
+      )}
 
       {/* Don't-allocate toggle */}
       <label className="flex items-start gap-2.5 text-sm text-slate-700 cursor-pointer">
