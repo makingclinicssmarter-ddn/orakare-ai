@@ -161,47 +161,10 @@ export default async function BalancePage() {
         )}
       </div>
 
-      {/* Credit balances — patients who overpaid */}
-      {creditors.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-medium text-slate-700 mb-3">
-            Credit balances ({creditors.length})
-          </h2>
-          <p className="text-xs text-slate-500 mb-3">
-            Patients who have paid more than the current treatment estimate (e.g. advance
-            payments, or treatments still being added). Total: <span className="text-green-700 font-medium">{formatINR(totalCredit)}</span>
-          </p>
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">Patient</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">Estimate</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">Collected</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">Credit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {creditors.map(function(r) {
-                  return (
-                    <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="py-3 px-4">
-                        <Link href={'/dashboard/patients/' + r.id} className="block">
-                          <div className="text-sm font-medium text-slate-900 hover:text-indigo-700">{r.name}</div>
-                          <div className="text-xs text-slate-400">{r.originalID}</div>
-                        </Link>
-                      </td>
-                      <td className="py-3 px-4 text-right text-sm text-slate-700">{formatINR(r.treatmentEstimate)}</td>
-                      <td className="py-3 px-4 text-right text-sm text-green-700">{formatINR(r.treatmentCollected)}</td>
-                      <td className="py-3 px-4 text-right text-sm font-medium text-green-700">+ {formatINR(r.credit)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {/* Push #4: Credit balances section removed. Credits are mostly noise
+          here (artifacts of import mismatches or wrong entries) and rarely
+          represent real overpayment. They remain visible inside each
+          treatment card on the patient Records page. */}
 
       <p className="text-xs text-slate-400 mt-6">
         <strong>Tx balance</strong> = unpaid treatments only (Treatment.estimate − discount, minus payments tagged to those treatments).

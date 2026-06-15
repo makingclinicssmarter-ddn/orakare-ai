@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import EditPatientButton from './EditPatientButton'
 
 const CONDITIONS = ['Diabetes', 'Hypertension', 'Heart disease', 'Asthma', 'Thyroid', 'Kidney disease', 'Bleeding disorder', 'Epilepsy', 'HIV/AIDS', 'Cancer', 'Pregnancy']
 const ALLERGIES = ['Penicillin', 'Aspirin', 'Ibuprofen', 'Latex', 'Local anaesthesia', 'Sulfa drugs']
@@ -437,15 +438,27 @@ function PatientRow({ patient }) {
           : new Date(patient.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
       </td>
       <td className="py-3 px-4">
-        <button
-          onClick={function(e) {
-            e.stopPropagation()
-            router.push('/dashboard/patients/' + patient.id)
-          }}
-          className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition"
-        >
-          View
-        </button>
+        <div className="flex items-center gap-1.5" onClick={function(e) { e.stopPropagation() }}>
+          <EditPatientButton size="sm" patient={{
+            id: patient.id,
+            originalID: patient.originalID,
+            name: patient.name,
+            mobile: patient.mobile,
+            age: patient.age,
+            gender: patient.gender,
+            address: patient.address,
+            email: patient.email,
+          }} />
+          <button
+            onClick={function(e) {
+              e.stopPropagation()
+              router.push('/dashboard/patients/' + patient.id)
+            }}
+            className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition"
+          >
+            View
+          </button>
+        </div>
       </td>
     </tr>
   )

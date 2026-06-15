@@ -160,6 +160,17 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
               )
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-t border-slate-200">
+              <td colSpan={3} className="py-2 px-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Visit charges sub-total</td>
+              <td className="py-2 px-2 text-right text-sm font-semibold text-slate-900">
+                ₹{charges.reduce(function(s, c) {
+                  return s + Math.max(0, Number(c.amount || 0) - Number(c.discount || 0))
+                }, 0).toLocaleString('en-IN')}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       )}
     </div>

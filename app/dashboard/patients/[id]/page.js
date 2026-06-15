@@ -3,8 +3,10 @@ import { db } from '@/lib/db'
 import { notFound, redirect } from 'next/navigation'
 import { getDoctorContext } from '@/lib/auth-helpers'
 import PatientHistoryActions from '@/components/patients/PatientHistoryActions'
+import EditPatientButton from '@/components/patients/EditPatientButton'
 import UnresolvedVisitBanner from '@/components/visits/UnresolvedVisitBanner'
 import UnallocatedBanner from '@/components/patients/UnallocatedBanner'
+import RecordPaymentButton from '@/components/invoice/RecordPaymentButton'
 import { computePatientFinances } from '@/lib/finance'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -251,12 +253,24 @@ export default async function PatientRecordsPage(props) {
           </p>
         </div>
 
-        <PatientHistoryActions
-          patientId={patient.id}
-          isArchived={isArchived}
-          hasInProgressVisit={!!inProgressVisit}
-          inProgressVisitId={inProgressVisit?.id}
-        />
+        <div className="flex items-center gap-2">
+          <EditPatientButton patient={{
+            id: patient.id,
+            originalID: patient.originalID,
+            name: patient.name,
+            mobile: patient.mobile,
+            age: patient.age,
+            gender: patient.gender,
+            address: patient.address,
+            email: patient.email,
+          }} />
+          <PatientHistoryActions
+            patientId={patient.id}
+            isArchived={isArchived}
+            hasInProgressVisit={!!inProgressVisit}
+            inProgressVisitId={inProgressVisit?.id}
+          />
+        </div>
       </div>
 
       {isArchived && (
@@ -566,13 +580,12 @@ export default async function PatientRecordsPage(props) {
             })}
 
             {patient.invoices.map(function(inv) {
+              const invBalance = Number(inv.balance) || 0
+              const hasDues = invBalance > 0.5
               return (
-                <a
+                <div
                   key={'inv-' + inv.id}
-                  href={'/api/invoice-print/' + inv.id}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block bg-white rounded-lg border border-slate-200 px-4 py-3 hover:bg-slate-50 transition"
+                  className="block bg-white rounded-lg border border-slate-200 px-4 py-3"
                 >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
@@ -584,9 +597,25 @@ export default async function PatientRecordsPage(props) {
                     <div className="text-right">
                       <div className="text-sm font-medium text-slate-900">{formatINR(inv.total)}</div>
                       <div className="text-xs text-slate-400">{formatDate(inv.date)}</div>
+                      {hasDues && (
+                        <div className="text-xs text-red-700 font-medium mt-0.5">Outstanding: {formatINR(invBalance)}</div>
+                      )}
                     </div>
                   </div>
-                </a>
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
+                    {hasDues && (
+                      <RecordPaymentButton invoice={{ id: inv.id, invoiceNo: inv.invoiceNo, balance: invBalance }} />
+                    )}
+                    <a
+                      href={'/api/invoice-print/' + inv.id}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+                    >
+                      View invoice →
+                    </a>
+                  </div>
+                </div>
               )
             })}
 

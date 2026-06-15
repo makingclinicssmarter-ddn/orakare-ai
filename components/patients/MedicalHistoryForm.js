@@ -255,63 +255,9 @@ export default function MedicalHistoryForm({ patient, visitId, existing }) {
         </div>
       </div>
 
-      {/* Medications */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-6 h-6 bg-green-50 rounded-lg flex items-center justify-center">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-            </svg>
-          </div>
-          <h3 className="text-sm font-medium text-gray-800">Current medications</h3>
-        </div>
-        <p className="text-xs text-gray-400 mb-3 ml-8">Blood thinners and diabetes medications affect treatment</p>
-
-        {form.medications.length > 0 && (
-          <div className="mb-3 space-y-2">
-            {form.medications.map(function(med, index) {
-              return (
-                <div key={index} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2.5">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">{med.name}</span>
-                    {med.dose && <span className="text-xs text-gray-400 ml-2">{med.dose}</span>}
-                  </div>
-                  <button
-                    onClick={function() { removeMedication(index) }}
-                    className="text-xs text-gray-400 hover:text-red-400 transition"
-                  >
-                    Remove
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Medication name"
-            value={form.medicationName}
-            onChange={function(e) { setForm(function(p) { return { ...p, medicationName: e.target.value } }) }}
-            className="flex-1 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-          />
-          <input
-            type="text"
-            placeholder="Dose"
-            value={form.medicationDose}
-            onChange={function(e) { setForm(function(p) { return { ...p, medicationDose: e.target.value } }) }}
-            onKeyDown={function(e) { if (e.key === 'Enter') addMedication() }}
-            className="w-24 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-          />
-          <button
-            onClick={addMedication}
-            className="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm hover:bg-gray-200 transition font-medium"
-          >
-            Add
-          </button>
-        </div>
-      </div>
+      {/* Push #4: Current medications block removed. Dr. Shobhna rarely enters
+          these. The medications field is still saved to DB as an empty array
+          for backward compatibility. */}
 
       {/* Submit */}
       <button

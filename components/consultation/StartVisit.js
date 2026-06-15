@@ -152,13 +152,9 @@ export default function StartVisit({ patient, visit, visitId }) {
             placeholder="penicillin, latex... then Enter"
             color="red"
           />
-          <TagInput
-            label="Current medications"
-            tags={medications}
-            setTags={setMedications}
-            placeholder="metformin, aspirin... then Enter"
-            color="amber"
-          />
+          {/* Push #4: Current medications removed (rarely entered). The
+              `medications` array still saves as [] to the DB for backward
+              compatibility. */}
         </div>
 
         {/* Dental history */}

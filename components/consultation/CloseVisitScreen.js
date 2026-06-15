@@ -44,6 +44,18 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
   const [tpAllocations, setTpAllocations] = useState([])  // [{ treatmentId, amount }]
   const [tpUnallocated, setTpUnallocated] = useState(false)  // "Don't allocate" toggle
 
+  // Push #4: which treatments should be marked complete on save.
+  // Set of treatmentId strings. Driven by checkboxes above Save button.
+  const [completedTreatmentIds, setCompletedTreatmentIds] = useState([])
+
+  function toggleComplete(treatmentId) {
+    setCompletedTreatmentIds(function(curr) {
+      return curr.includes(treatmentId)
+        ? curr.filter(function(id) { return id !== treatmentId })
+        : curr.concat(treatmentId)
+    })
+  }
+
   const [nextApt, setNextApt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -105,6 +117,7 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
           mode: tpMode,
           allocations: tpUnallocated ? [] : tpAllocations.filter(function(a) { return Number(a.amount) > 0 }),
         } : null,
+        treatmentsToComplete: completedTreatmentIds,
         nextAppointment: nextApt,
       }
 
@@ -220,9 +233,35 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
 
       <NextAppointmentPicker value={nextApt} onChange={setNextApt} />
 
+      {/* Push #4: Mark treatments complete inline at close. Saves a trip
+          to the Treatments tab when a treatment finishes in this visit. */}
+      {activeTreatments && activeTreatments.length > 0 && (
+        <div className="mt-6 bg-white rounded-xl border border-slate-200 p-5">
+          <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Mark treatment complete</div>
+          <p className="text-xs text-slate-500 mb-3">Tick if today&apos;s sitting was the last sitting for a treatment. Saves a trip to the Treatments tab.</p>
+          <div className="space-y-1.5">
+            {activeTreatments.map(function(t) {
+              const checked = completedTreatmentIds.includes(t.id)
+              return (
+                <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={function() { toggleComplete(t.id) }}
+                    className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-400"
+                  />
+                  <span className="text-slate-700">{t.type}{t.area ? ' ' + t.area : ''}</span>
+                  <span className="text-xs text-slate-400 ml-1">({t.status === 'IN_PROGRESS' ? 'In progress' : 'Planned'})</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-xs text-slate-500">
-          Saving marks the visit closed{vcTotals.grand > 0 ? ', generates invoice' : ''}{tpAmount > 0 ? ', records treatment payment' : ''}{nextApt ? ', books next appointment' : ''}.
+          Saving marks the visit closed{vcTotals.grand > 0 ? ', generates invoice' : ''}{tpAmount > 0 ? ', records treatment payment' : ''}{completedTreatmentIds.length > 0 ? ', marks ' + completedTreatmentIds.length + ' treatment' + (completedTreatmentIds.length > 1 ? 's' : '') + ' complete' : ''}{nextApt ? ', books next appointment' : ''}.
         </div>
         <div className="flex items-center gap-3">
           {error && <span className="text-xs text-red-600">{error}</span>}

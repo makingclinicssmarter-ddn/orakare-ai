@@ -116,7 +116,10 @@ export default function DashboardView({
   ]
 
   const alerts = []
-  if (overdueCount > 0) alerts.push({ type: 'red', text: overdueCount + ' patient' + (overdueCount > 1 ? 's' : '') + ' not seen in 30+ days', href: '/dashboard/records' })
+  if (overdueCount > 0) {
+    // Push #4: Overdue alerts no longer shown on dashboard. Dr. Shobhna
+    // surfaces these via WhatsApp follow-ups, not the dashboard.
+  }
   if (pendingFeeTotal > 0) alerts.push({ type: 'amber', text: '₹' + pendingFeeTotal.toLocaleString('en-IN') + ' consultant fees pending', href: '/dashboard/consultants' })
   if (lowStockCount > 0) alerts.push({ type: 'amber', text: lowStockCount + ' inventory item' + (lowStockCount > 1 ? 's' : '') + ' low or out of stock', href: '/dashboard/inventory' })
   if (expiringCount > 0) alerts.push({ type: 'blue', text: expiringCount + ' item' + (expiringCount > 1 ? 's' : '') + ' expiring within 30 days', href: '/dashboard/inventory' })
@@ -183,12 +186,12 @@ export default function DashboardView({
       </div>
 
       {/* Stat cards — each links to a verification page so Dr. Shobhna can
-          audit the totals. Overdue card scrolls to the panel below. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.25rem' }}>
+          audit the totals. Push #4: removed Overdue patients card (data
+          dashboard, not action launcher). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '1.25rem' }}>
         {[
           { label: 'This month', value: '₹' + monthRevenue.toLocaleString('en-IN'), sub: 'Expenses: ₹' + monthExpTotal.toLocaleString('en-IN'), bg: '#E1F5EE', border: '#9FE1CB', valColor: '#085041', subColor: '#0F6E56', icon: '💰', href: '/dashboard/finance' },
           { label: 'Total patients', value: totalPatients, sub: activeTreatmentsCount + ' active treatments', bg: '#EEEDFE', border: '#CECBF6', valColor: '#3C3489', subColor: '#534AB7', icon: '👤', href: '/dashboard/patients' },
-          { label: 'Overdue patients', value: overdueCount, sub: 'Not seen in 30+ days', bg: '#FAEEDA', border: '#FAC775', valColor: '#633806', subColor: '#854F0B', icon: '🦷', href: '#overdue-panel' },
           { label: 'Balance pending', value: '₹' + balancePending.toLocaleString('en-IN'), sub: 'Across all patients', bg: '#FCEBEB', border: '#F7C1C1', valColor: '#A32D2D', subColor: '#A32D2D', icon: '⚖️', href: '/dashboard/balance' },
         ].map(function(stat) {
           return (
@@ -268,8 +271,9 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Pie chart + Overdue patients */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1.25rem' }}>
+      {/* Top treatments — Push #4: was a 2-column grid with Overdue panel.
+          Overdue panel removed (dashboard becomes data review surface). */}
+      <div style={{ marginBottom: '1.25rem' }}>
         <div style={{ background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-tertiary)', borderRadius: '14px', padding: '1.1rem 1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-text-primary)' }}>Top treatments</p>
@@ -289,31 +293,6 @@ export default function DashboardView({
               })}
             </div>
           </div>
-        </div>
-
-        <div id="overdue-panel" style={{ background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-tertiary)', borderRadius: '14px', padding: '1.1rem 1.25rem', scrollMarginTop: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-text-primary)' }}>Overdue patients</p>
-            <Link href="/dashboard/patients" style={{ fontSize: '11px', color: '#534AB7', textDecoration: 'none' }}>All patients →</Link>
-          </div>
-          {overduePatients.length === 0 ? (
-            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', padding: '24px', textAlign: 'center' }}>No overdue patients</p>
-          ) : (
-            overduePatients.map(function(p, i) {
-              const [bg, color] = AVATAR_COLORS[i % AVATAR_COLORS.length]
-              const initials = p.name.split(' ').map(function(n) { return n[0] }).join('').toUpperCase().slice(0,2)
-              return (
-                <Link key={p.id} href={'/dashboard/patients/' + p.id} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 0', borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: bg, color: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '500', flexShrink: 0 }}>{initials}</div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-text-primary)' }}>{p.name}</p>
-                    <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.treatment}{p.toothRef ? ' · Tooth ' + p.toothRef : ''}</p>
-                  </div>
-                  <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: '#FCEBEB', color: '#A32D2D', fontWeight: '500', flexShrink: 0 }}>{p.daysSince}d</span>
-                </Link>
-              )
-            })
-          )}
         </div>
       </div>
 
@@ -336,16 +315,15 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Quick actions */}
+      {/* Quick actions — Push #4: removed New patient + Add expense.
+          Dashboard is for review, not data entry. */}
       <div style={{ background: 'var(--color-background-primary)', border: '0.5px solid var(--color-border-tertiary)', borderRadius: '14px', padding: '1.1rem 1.25rem' }}>
         <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-text-primary)', marginBottom: '12px' }}>Quick actions</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' }}>
           {[
             { icon: '📅', label: 'Book appointment', bg: '#E1F5EE', href: '/dashboard/appointments' },
-            { icon: '👤', label: 'New patient', bg: '#EEEDFE', href: '/dashboard/patients' },
-            { icon: '💸', label: 'Add expense', bg: '#FAEEDA', href: '/dashboard/expenses' },
             { icon: '🔁', label: 'Send follow up', bg: '#E6F1FB', href: '/dashboard/notifications' },
-{ icon: '⭐', label: 'Seek review', bg: '#FFF7ED', href: '/dashboard/notifications' },
+            { icon: '⭐', label: 'Seek review', bg: '#FFF7ED', href: '/dashboard/notifications' },
           ].map(function(item) {
             const style = {
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',

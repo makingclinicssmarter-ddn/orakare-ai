@@ -131,14 +131,17 @@ export default function InventoryPicker({ items, setItems }) {
               <th className="text-left py-2 px-2 text-xs text-slate-500">Item</th>
               <th className="text-right py-2 px-2 text-xs text-slate-500 w-20">Qty</th>
               <th className="text-right py-2 px-2 text-xs text-slate-500 w-24">Unit ₹</th>
-              <th className="text-right py-2 px-2 text-xs text-slate-500 w-28">Discount</th>
+              <th className="text-right py-2 px-2 text-xs text-slate-500 w-28">Disc / unit</th>
               <th className="text-right py-2 px-2 text-xs text-slate-500 w-24">Net</th>
               <th className="py-2 px-2 w-10"></th>
             </tr>
           </thead>
           <tbody>
             {items.map(function(i) {
-              const net = Math.max(0, (Number(i.quantity) * Number(i.unitPrice || 0)) - Number(i.discount || 0))
+              // Push #4: discount is now PER UNIT, not flat per line.
+              // net = qty * (unitPrice - discountPerUnit)
+              const netUnit = Math.max(0, Number(i.unitPrice || 0) - Number(i.discount || 0))
+              const net = Number(i.quantity) * netUnit
               const overstock = Number(i.quantity) > Number(i.stockQty || 0)
               return (
                 <tr key={i.tempId} className="border-b border-slate-100">
@@ -187,6 +190,18 @@ export default function InventoryPicker({ items, setItems }) {
               )
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-t border-slate-200">
+              <td colSpan={4} className="py-2 px-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Inventory sub-total</td>
+              <td className="py-2 px-2 text-right text-sm font-semibold text-slate-900">
+                ₹{items.reduce(function(s, it) {
+                  const netUnit = Math.max(0, Number(it.unitPrice || 0) - Number(it.discount || 0))
+                  return s + (Number(it.quantity) * netUnit)
+                }, 0).toLocaleString('en-IN')}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       )}
     </div>

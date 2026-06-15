@@ -99,14 +99,16 @@ export async function POST(req, props) {
     .map(function(i) {
       const qty = Number(i.quantity)
       const price = Number(i.unitPrice) || 0
-      const disc = Number(i.discount) || 0
+      // Push #4: discount is per-unit, not flat. Total line discount = qty * disc.
+      const discPerUnit = Number(i.discount) || 0
+      const lineDiscount = qty * discPerUnit
       return {
         inventoryItemId: i.inventoryItemId,
         description: i.name || 'Inventory item',
         quantity: qty,
         unitPrice: price,
-        discount: disc,
-        total: Math.max(0, (qty * price) - disc),
+        discount: lineDiscount,
+        total: Math.max(0, (qty * price) - lineDiscount),
       }
     })
   const allLines = chargeLines.concat(invLines)
@@ -235,6 +237,37 @@ export async function POST(req, props) {
           where: { id: { in: consentedTreatmentIds }, status: 'PLANNED' },
           data: { status: 'IN_PROGRESS', startedAt: new Date() },
         })
+      }
+
+      // 6b. Push #4: Mark treatments complete if checked on the Close screen.
+      // Append "[Completed <date>]" to each Treatment.notes (same convention
+      // as the standalone Mark complete endpoint).
+      const treatmentsToComplete = Array.isArray(body.treatmentsToComplete) ? body.treatmentsToComplete : []
+      if (treatmentsToComplete.length > 0) {
+        // Verify these treatments belong to this patient + clinic to avoid
+        // cross-tenant marking.
+        const validToComplete = await tx.treatment.findMany({
+          where: {
+            id: { in: treatmentsToComplete },
+            clinicId: ctx.clinicId,
+            patientId: visit.patientId,
+            status: { in: ['PLANNED', 'IN_PROGRESS'] },
+          },
+          select: { id: true, notes: true },
+        })
+
+        const stamp = new Date().toLocaleDateString('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata',
+        })
+        const completionLine = '[Completed ' + stamp + ' at visit close]'
+
+        for (const t of validToComplete) {
+          const newNotes = t.notes ? t.notes + '\n\n' + completionLine : completionLine
+          await tx.treatment.update({
+            where: { id: t.id },
+            data: { status: 'COMPLETED', completedAt: new Date(), notes: newNotes },
+          })
+        }
       }
 
       // 7. Appointment

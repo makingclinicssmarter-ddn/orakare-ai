@@ -58,8 +58,8 @@ function PatientPanel({ patient, visit }) {
         </div>
       )}
 
-      {/* Medical history */}
-      {(conditions.length > 0 || allergies.length > 0 || medications.length > 0) && (
+      {/* Medical history — Push #4: Current medications hidden (rarely used) */}
+      {(conditions.length > 0 || allergies.length > 0) && (
         <div className="p-5 border-b border-slate-100 space-y-3">
           <div className="text-xs font-medium text-slate-400 uppercase tracking-wider">
             Medical history
@@ -86,20 +86,6 @@ function PatientPanel({ patient, visit }) {
                   return (
                     <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700">
                       {a}
-                    </span>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-          {medications.length > 0 && (
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Medications</div>
-              <div className="flex flex-wrap gap-1">
-                {medications.map(function(m, i) {
-                  return (
-                    <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
-                      {m}
                     </span>
                   )
                 })}
