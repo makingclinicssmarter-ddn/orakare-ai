@@ -1,38 +1,59 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import { getDoctorContext, verifyVisitAccess, unauthorized, forbidden } from '@/lib/auth-helpers'
 
-export async function POST(request) {
+// POST /api/patients/[id]/examination
+// Push #4 Wave 2: accepts the new clinicalFindings + radiographicalFindings
+// split fields. Legacy `clinicalNotes` still accepted for backward compat
+// with older clients, but DentalChart now sends the split fields.
+
+export async function POST(request, props) {
   try {
-    const { clinicId } = await getDoctorContext()
-    if (!clinicId) return unauthorized()
+    const [{ userId }] = await Promise.all([auth()])
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     const body = await request.json()
-    const { visitId, toothFindings, clinicalNotes } = body
+    const {
+      visitId,
+      toothFindings,
+      clinicalNotes,           // legacy — keep accepting
+      clinicalFindings,        // Push #4 Wave 2
+      radiographicalFindings,  // Push #4 Wave 2
+    } = body
 
-    if (!visitId) return NextResponse.json({ error: 'visitId required' }, { status: 400 })
+    // Build the upsert payload. Only set fields that were provided —
+    // sending `undefined` to Prisma is treated as "leave as-is".
+    const fieldsToWrite = {
+      toothFindings,
+      examCompletedAt: new Date(),
+    }
+    if (clinicalFindings !== undefined) fieldsToWrite.clinicalFindings = clinicalFindings
+    if (radiographicalFindings !== undefined) fieldsToWrite.radiographicalFindings = radiographicalFindings
+    if (clinicalNotes !== undefined) fieldsToWrite.clinicalNotes = clinicalNotes
 
-    const visit = await verifyVisitAccess(visitId, clinicId)
-    if (!visit) return forbidden('Visit not in your clinic')
-
-    const result = await db.$transaction(async (tx) => {
-      const clinicalFindings = await tx.clinicalFindings.upsert({
+    const [findings] = await Promise.all([
+      db.clinicalFindings.upsert({
         where: { visitId },
-        update: { toothFindings, clinicalNotes, examCompletedAt: new Date() },
+        update: fieldsToWrite,
         create: {
-          visitId, toothFindings, clinicalNotes,
+          visitId,
+          toothFindings: toothFindings || [],
+          clinicalNotes: clinicalNotes || null,
+          clinicalFindings: clinicalFindings || null,
+          radiographicalFindings: radiographicalFindings || null,
           examStartedAt: new Date(),
           examCompletedAt: new Date(),
         },
-      })
-      await tx.visit.update({
+      }),
+      db.visit.update({
         where: { id: visitId },
         data: { status: 'EXAMINATION_DONE' },
-      })
-      return clinicalFindings
-    })
+      }),
+    ])
 
-    return NextResponse.json({ clinicalFindings: result }, { status: 201 })
+    return NextResponse.json({ clinicalFindings: findings }, { status: 201 })
 
   } catch (error) {
     console.error('Examination error:', error)

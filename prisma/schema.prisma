@@ -186,6 +186,13 @@ model ClinicalFindings {
   toothFindings    Json     @default("[]")
   aiSuggestions    Json     @default("[]")
   clinicalNotes    String?
+
+  // Push #4 Wave 2 — split clinical findings.
+  // New visits write to these. Old visits keep their data in clinicalNotes;
+  // UI reads clinicalFindings first, falls back to clinicalNotes.
+  clinicalFindings       String?
+  radiographicalFindings String?
+
   voiceTranscript  String?
   images           Json     @default("[]")
   examStartedAt    DateTime?

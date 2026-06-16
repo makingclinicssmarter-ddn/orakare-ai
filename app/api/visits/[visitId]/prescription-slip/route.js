@@ -58,7 +58,7 @@ export async function GET(_req, props) {
       doctor: { select: { name: true, qualification: true } },
       clinic: { select: { name: true, address: true, phone: true, regNo: true } },
       medicalHistory: { select: { chiefComplaint: true } },
-      clinicalFindings: { select: { clinicalNotes: true } },
+      clinicalFindings: { select: { clinicalNotes: true, clinicalFindings: true, radiographicalFindings: true } },
       treatmentPlan: {
         include: {
           treatmentItems: {
@@ -204,11 +204,22 @@ export async function GET(_req, props) {
     <div class="section-body">${esc(visit.medicalHistory.chiefComplaint)}</div>
   </div>` : ''}
 
-  ${visit.clinicalFindings?.clinicalNotes ? `
-  <div class="section">
-    <div class="section-title">Findings</div>
-    <div class="section-body" style="white-space: pre-wrap;">${esc(visit.clinicalFindings.clinicalNotes)}</div>
-  </div>` : ''}
+  ${(function() {
+    // Push #4 Wave 2: split findings sections. Fall back to legacy clinicalNotes
+    // for the Clinical section if the new field is empty.
+    const clin = visit.clinicalFindings?.clinicalFindings || visit.clinicalFindings?.clinicalNotes || ''
+    const radio = visit.clinicalFindings?.radiographicalFindings || ''
+    let html = ''
+    if (clin) {
+      html += '<div class="section"><div class="section-title">Clinical findings</div>'
+      html += '<div class="section-body" style="white-space: pre-wrap;">' + esc(clin) + '</div></div>'
+    }
+    if (radio) {
+      html += '<div class="section"><div class="section-title">Radiographical findings</div>'
+      html += '<div class="section-body" style="white-space: pre-wrap;">' + esc(radio) + '</div></div>'
+    }
+    return html
+  })()}
 
   ${plannedTreatments.length > 0 ? `
   <div class="section">
@@ -246,10 +257,12 @@ export async function GET(_req, props) {
     <div class="section-body">${esc(fmtDate(visit.nextAppointmentDate))}</div>
   </div>` : ''}
 
-  ${!visit.medicalHistory?.chiefComplaint && !visit.clinicalFindings?.clinicalNotes && plannedTreatments.length === 0 && medicationLines.length === 0 && !visit.advice && !visit.nextAppointmentDate ? `
-  <div class="section">
-    <div class="section-body empty">No clinical details recorded for this visit.</div>
-  </div>` : ''}
+  ${(function() {
+    // Empty state when no clinical content at all
+    const hasFindings = visit.clinicalFindings?.clinicalFindings || visit.clinicalFindings?.clinicalNotes || visit.clinicalFindings?.radiographicalFindings
+    if (visit.medicalHistory?.chiefComplaint || hasFindings || plannedTreatments.length > 0 || medicationLines.length > 0 || visit.advice || visit.nextAppointmentDate) return ''
+    return '<div class="section"><div class="section-body empty">No clinical details recorded for this visit.</div></div>'
+  })()}
 
   <div class="footer">
     <div>Generated ${esc(fmtDateTime(new Date()))}</div>
