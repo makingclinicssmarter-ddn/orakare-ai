@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import DentalChart from './DentalChart'
 import AIFindings from './AIFindings'
+import AIDraftPanel from './AIDraftPanel'
 
 // Push #4 Wave 2: Top-to-bottom examination layout.
 //   1. Clinical Findings (text)
@@ -75,6 +76,11 @@ export default function ExaminationView({ patient, visitId, existing, nextUrl })
           rows={4}
           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
         />
+        <AIDraftPanel
+          shorthand={clinicalFindings}
+          kind="clinical"
+          onAccept={function(text) { setClinicalFindings(text) }}
+        />
       </div>
 
       {/* 2. Radiographical Findings */}
@@ -89,6 +95,11 @@ export default function ExaminationView({ patient, visitId, existing, nextUrl })
           placeholder="e.g. Periapical radiolucency on 14. Generalized horizontal bone loss. Impacted 38 mesioangular. Furcation involvement on 36."
           rows={3}
           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+        />
+        <AIDraftPanel
+          shorthand={radiographicalFindings}
+          kind="radiographical"
+          onAccept={function(text) { setRadiographicalFindings(text) }}
         />
       </div>
 
