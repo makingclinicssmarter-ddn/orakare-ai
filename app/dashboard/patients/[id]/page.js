@@ -7,6 +7,8 @@ import EditPatientButton from '@/components/patients/EditPatientButton'
 import UnresolvedVisitBanner from '@/components/visits/UnresolvedVisitBanner'
 import UnallocatedBanner from '@/components/patients/UnallocatedBanner'
 import RecordPaymentButton from '@/components/invoice/RecordPaymentButton'
+import RecordTreatmentPaymentButton from '@/components/treatments/RecordTreatmentPaymentButton'
+import EditEstimateButton from '@/components/treatments/EditEstimateButton'
 import { computePatientFinances } from '@/lib/finance'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -410,7 +412,16 @@ export default async function PatientRecordsPage(props) {
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-sm font-medium text-slate-900">{formatINR(netEstimate)}</div>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <div className="text-sm font-medium text-slate-900">{formatINR(netEstimate)}</div>
+                        {t.status !== 'CANCELLED' && (
+                          <EditEstimateButton
+                            treatment={{ id: t.id }}
+                            currentEstimate={t.estimate || 0}
+                            alreadyPaid={paidForThisTreatment}
+                          />
+                        )}
+                      </div>
                       <div className="text-xs text-slate-500 mt-0.5">
                         Paid {formatINR(paidForThisTreatment)}
                         {balance > 0 && <span className="text-red-600"> · Bal {formatINR(balance)}</span>}
@@ -466,6 +477,32 @@ export default async function PatientRecordsPage(props) {
                           </div>
                         )
                       })
+                    )}
+
+                    {/* Push #6: action row — Start sitting (active treatments) + Record payment (any with dues) */}
+                    {t.status !== 'CANCELLED' && (
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
+                        {(t.status === 'PLANNED' || t.status === 'IN_PROGRESS') && (
+                          <Link
+                            href={'/dashboard/treatments/' + t.id + '/sitting'}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium whitespace-nowrap"
+                          >
+                            + Start sitting
+                          </Link>
+                        )}
+                        {balance > 0.5 && (
+                          <RecordTreatmentPaymentButton
+                            treatment={{ id: t.id, type: t.type, area: t.area }}
+                            balance={balance}
+                          />
+                        )}
+                        <Link
+                          href={'/dashboard/treatments/' + t.id}
+                          className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+                        >
+                          Open treatment →
+                        </Link>
+                      </div>
                     )}
                   </div>
                 </details>
