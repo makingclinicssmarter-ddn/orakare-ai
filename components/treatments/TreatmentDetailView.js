@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MarkCompleteButton from './MarkCompleteButton'
+import SittingCorrectionButton from './SittingCorrectionButton'
 
 const STATUS_TONE = {
   PLANNED: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -111,6 +112,7 @@ export default function TreatmentDetailView({ treatment, sittings, totalPaid, es
           <div className="space-y-2">
             {sittings.map(function(s, idx) {
               const sittingNumber = sittings.length - idx
+              const corrections = Array.isArray(s.corrections) ? s.corrections : []
               return (
                 <div key={s.id} className="border border-slate-100 rounded-lg p-3">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -118,17 +120,39 @@ export default function TreatmentDetailView({ treatment, sittings, totalPaid, es
                       <div className="text-sm font-medium text-slate-900">Sitting {sittingNumber}</div>
                       <div className="text-xs text-slate-400 mt-0.5">{formatDate(s.date)}</div>
                     </div>
-                    {s.paid > 0 && (
-                      <div className="text-xs text-slate-400">
-                        Historical: <span className="text-green-700">{formatINR(s.paid)} {s.payMode || ''}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {s.paid > 0 && (
+                        <div className="text-xs text-slate-400">
+                          Historical: <span className="text-green-700">{formatINR(s.paid)} {s.payMode || ''}</span>
+                        </div>
+                      )}
+                      <SittingCorrectionButton sittingId={s.id} />
+                    </div>
                   </div>
                   {s.description && (
                     <div className="text-sm text-slate-700 mt-2 whitespace-pre-wrap">{s.description}</div>
                   )}
                   {s.notes && (
                     <div className="text-xs text-slate-500 mt-1.5 whitespace-pre-wrap">{s.notes}</div>
+                  )}
+
+                  {/* Push #5: Appended correction notes */}
+                  {corrections.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-dashed border-slate-200 space-y-2">
+                      <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+                        Corrections ({corrections.length})
+                      </div>
+                      {corrections.map(function(c, i) {
+                        return (
+                          <div key={i} className="bg-amber-50/40 border border-amber-100 rounded-md px-2.5 py-1.5">
+                            <div className="text-[10px] text-amber-700 font-medium">
+                              Added {formatDate(c.addedAt)}
+                            </div>
+                            <div className="text-xs text-slate-700 mt-0.5 whitespace-pre-wrap">{c.note}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               )

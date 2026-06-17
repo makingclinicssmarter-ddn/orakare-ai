@@ -39,6 +39,7 @@ invoicePrefix    String?  @default("OKR")
   consultants  Consultant[]
   feeEntries   FeeEntry[]
   inventory    InventoryItem[]
+  inventoryBatches InventoryBatch[]
   expenses     Expense[]
   appointments Appointment[]
   visits    Visit[]
@@ -418,6 +419,10 @@ model Sitting {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   description String?
+
+  // Push #5: append-only correction log. Each entry { note, addedAt, addedBy }.
+  // Original sitting fields stay immutable; this preserves the audit trail.
+  corrections     Json     @default("[]")
   treatmentItem TreatmentItem @relation(fields: [treatmentId], references: [id])
   patient   Patient   @relation(fields: [patientId], references: [id])
   clinic    Clinic    @relation(fields: [clinicId], references: [id])
@@ -479,6 +484,10 @@ model InvoiceItem {
   unitPrice   Float
   total       Float
   createdAt   DateTime @default(now())
+
+  // Push #5: which batches were drawn down for this line item.
+  // Format: [{ batchId, qty, unitCost }]
+  batchAllocations Json @default("[]")
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
@@ -599,7 +608,7 @@ model InventoryItem {
   name        String
   category    String?
   unit        String?
-  stockQty    Float    @default(0)
+  stockQty    Float    @default(0)  // LEGACY — kept for backward compat; batch sum is now source of truth
   minStock    Float?   @default(0)
   unitCost    Float?
   supplier    String?
@@ -609,9 +618,49 @@ model InventoryItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Push #5: batch-based inventory
+  minOrderQty Int      @default(5)
+  trackExpiry Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  batches     InventoryBatch[]
+
   clinic Clinic @relation(fields: [clinicId], references: [id])
 
   @@index([clinicId])
+}
+
+model InventoryBatch {
+  id              String       @id @default(cuid())
+  clinicId        String
+  inventoryItemId String
+  batchCode       String?
+  quantity        Int          @default(0)
+  initialQuantity Int          @default(0)
+  unitCost        Float        @default(0)
+  expiryDate      DateTime?
+  receivedDate    DateTime     @default(now())
+  supplier        String?
+  expenseId       String?
+  notes           String?
+  status          BatchStatus  @default(ACTIVE)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  expense       Expense?      @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId])
+  @@index([inventoryItemId])
+  @@index([clinicId, expiryDate])
+  @@index([status])
+}
+
+enum BatchStatus {
+  ACTIVE
+  DEPLETED
+  EXPIRED
+  DAMAGED
 }
 
 // ─── EXPENSE ──────────────────────────────────────────────────────────────────
@@ -631,6 +680,7 @@ model Expense {
   updatedAt   DateTime @updatedAt
 
   clinic Clinic @relation(fields: [clinicId], references: [id])
+  inventoryBatches InventoryBatch[]
 
   @@index([clinicId])
   @@index([clinicId, date])

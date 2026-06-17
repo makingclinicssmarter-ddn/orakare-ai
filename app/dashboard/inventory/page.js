@@ -1,28 +1,17 @@
-import { db } from '@/lib/db'
-import { auth } from '@clerk/nextjs/server'
-import InventoryView from '@/components/inventory/InventoryView'
+import InventoryListView from '@/components/inventory/InventoryListView'
 
-export default async function InventoryPage() {
-  const { userId } = await auth()
+export const dynamic = 'force-dynamic'
 
-  const doctor = await db.doctor.findFirst({
-    where: { clerkId: userId },
-  })
-
-  const items = doctor ? await db.inventoryItem.findMany({
-    where: { clinicId: doctor.clinicId },
-    orderBy: { name: 'asc' },
-  }) : []
-
+export default function InventoryPage() {
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Inventory</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          Consumables, materials and supplies
-        </p>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="mb-6 flex items-baseline justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Inventory</h1>
+          <p className="text-sm text-slate-500 mt-1">Stock by batch, FIFO dispensing, expiry tracking.</p>
+        </div>
       </div>
-      <InventoryView items={items} />
+      <InventoryListView />
     </div>
   )
 }

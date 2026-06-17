@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDoctorContext, unauthorized, forbidden, notFoundResponse } from '@/lib/auth-helpers'
 import { nextCounter, formatInvoiceNo } from '@/lib/counter'
+import { planFifoDispense } from '@/lib/inventory-fifo'
 
 // POST /api/consultation/visit/[visitId]/close
 //
@@ -125,6 +126,30 @@ export async function POST(req, props) {
     invoiceNo = formatInvoiceNo(null, seq)
   }
 
+  // Push #5: plan FIFO dispense for each inventory line BEFORE the transaction.
+  // For each invLine, load that item's active batches and compute which batches
+  // to draw from. Block the close if any line is short.
+  const fifoPlans = {}  // tempId-like key (inventoryItemId index) → allocations[]
+  for (let idx = 0; idx < invLines.length; idx++) {
+    const line = invLines[idx]
+    const batches = await db.inventoryBatch.findMany({
+      where: {
+        clinicId: ctx.clinicId,
+        inventoryItemId: line.inventoryItemId,
+        status: 'ACTIVE',
+        quantity: { gt: 0 },
+      },
+      select: { id: true, quantity: true, expiryDate: true, receivedDate: true, unitCost: true, status: true },
+    })
+    const plan = planFifoDispense(batches, line.quantity)
+    if (plan.shortBy > 0) {
+      return NextResponse.json({
+        error: 'Not enough stock for inventory item "' + line.description + '". Short by ' + plan.shortBy + '. Restock or remove from this visit.',
+      }, { status: 400 })
+    }
+    fifoPlans[idx] = plan.allocations
+  }
+
   try {
     const result = await db.$transaction(async function(tx) {
       // 1. Update visit
@@ -163,6 +188,14 @@ export async function POST(req, props) {
         invoiceId = inv.id
 
         for (const line of allLines) {
+          // Find matching FIFO plan for inventory lines (chargeLines have no inventoryItemId)
+          let batchAllocations = []
+          if (line.inventoryItemId) {
+            const invLineIdx = invLines.findIndex(function(il) { return il.inventoryItemId === line.inventoryItemId && il.description === line.description })
+            if (invLineIdx >= 0 && fifoPlans[invLineIdx]) {
+              batchAllocations = fifoPlans[invLineIdx]
+            }
+          }
           await tx.invoiceItem.create({
             data: {
               invoiceId: inv.id,
@@ -170,6 +203,7 @@ export async function POST(req, props) {
               quantity: line.quantity,
               unitPrice: line.unitPrice,
               total: line.total,
+              batchAllocations: batchAllocations,
             },
           })
         }
@@ -219,12 +253,23 @@ export async function POST(req, props) {
         }
       }
 
-      // 5. Decrement inventory stock
-      for (const i of invLines) {
-        await tx.inventoryItem.update({
-          where: { id: i.inventoryItemId },
-          data: { stockQty: { decrement: i.quantity } },
-        })
+      // 5. Decrement batches per FIFO plan (Push #5)
+      for (let idx = 0; idx < invLines.length; idx++) {
+        const plan = fifoPlans[idx] || []
+        for (const alloc of plan) {
+          // Decrement batch quantity; if it hits 0, mark DEPLETED.
+          const updated = await tx.inventoryBatch.update({
+            where: { id: alloc.batchId },
+            data: { quantity: { decrement: alloc.qty } },
+            select: { quantity: true },
+          })
+          if (updated.quantity <= 0) {
+            await tx.inventoryBatch.update({
+              where: { id: alloc.batchId },
+              data: { status: 'DEPLETED' },
+            })
+          }
+        }
       }
 
       // 6. Treatment lifecycle: PLANNED → IN_PROGRESS for consented items in this visit

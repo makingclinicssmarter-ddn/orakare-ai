@@ -23,7 +23,8 @@ export default function InventoryPicker({ items, setItems }) {
     debounceRef.current = setTimeout(async function() {
       setSearching(true)
       try {
-        const res = await fetch('/api/inventory/search?q=' + encodeURIComponent(search))
+        // Push #5: use the new /api/inventory endpoint (returns totalActive per item from batches)
+        const res = await fetch('/api/inventory?q=' + encodeURIComponent(search))
         if (res.ok) {
           const data = await res.json()
           setResults(data.items || [])
@@ -57,7 +58,7 @@ export default function InventoryPicker({ items, setItems }) {
         quantity: 1,
         unitPrice: it.unitCost || 0,
         discount: 0,
-        stockQty: it.stockQty,
+        stockQty: it.totalActive || 0,  // Push #5: batch sum, not stockQty legacy field
       })
     })
     setSearch('')
@@ -97,7 +98,8 @@ export default function InventoryPicker({ items, setItems }) {
               <div className="px-3 py-2 text-xs text-slate-400">No matches</div>
             ) : (
               results.map(function(it) {
-                const low = it.stockQty < 5
+                const stock = it.totalActive || 0
+                const low = stock < (it.minOrderQty || 5)
                 return (
                   <button
                     key={it.id}
@@ -107,10 +109,11 @@ export default function InventoryPicker({ items, setItems }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm text-slate-900">{it.name}</div>
-                        <div className="text-xs text-slate-400">{it.category} · ₹{it.unitCost}</div>
+                        <div className="text-xs text-slate-400">{it.category || ''} · ₹{it.unitCost || 0}</div>
                       </div>
-                      <div className={'text-xs ' + (low ? 'text-red-600' : 'text-slate-400')}>
-                        {it.stockQty} {it.unit || ''} in stock
+                      <div className={'text-xs ' + (low ? 'text-red-600 font-medium' : 'text-slate-400')}>
+                        {stock} {it.unit || ''} in stock
+                        {it.totalAtRisk > 0 && <span className="ml-1 text-amber-600">⚠</span>}
                       </div>
                     </div>
                   </button>
