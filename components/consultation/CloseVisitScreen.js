@@ -178,29 +178,7 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
         <ChargesPanel presets={presets} charges={charges} setCharges={setCharges} />
         <InventoryPicker items={invItems} setItems={setInvItems} />
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Round off / adjustment</label>
-            <p className="text-xs text-slate-500 mb-2">To clean up totals (e.g. ₹823 → ₹800), add a round-off line in the Visit charges table above with a negative amount.</p>
-            <button
-              type="button"
-              onClick={function() {
-                setCharges(function(curr) {
-                  return curr.concat({
-                    tempId: 'round_' + Math.random().toString(36).slice(2, 8),
-                    label: 'Round off',
-                    amount: 0,
-                    discount: 0,
-                    category: null,
-                  })
-                })
-              }}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 font-medium"
-            >
-              + Add round off line
-            </button>
-            <p className="text-[10px] text-slate-400 mt-2">Tip: enter a negative amount on the round-off line to subtract.</p>
-          </div>
+        <div className="mt-4">
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Payment received</label>
             <div className="flex gap-2">
@@ -211,6 +189,7 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
                 {PAY_MODES.map(function(m) { return <option key={m} value={m}>{m}</option> })}
               </select>
             </div>
+            <p className="text-[10px] text-slate-400 mt-2">Tip: for round-offs (e.g. ₹823 → ₹800), use the &quot;+ Round off&quot; button in the Charges table and enter a negative amount.</p>
           </div>
         </div>
 

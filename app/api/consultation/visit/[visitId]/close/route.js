@@ -143,6 +143,12 @@ export async function POST(req, props) {
 
       // 2. Visit-charge invoice (kind=VISIT_CHARGES)
       if (allLines.length > 0) {
+        // Push #7: derive subtotal/discount for the Invoice columns.
+        // Subtotal is the sum of pre-discount line amounts.
+        // Discount is the sum of line-level discounts.
+        const subtotalForInvoice = allLines.reduce(function(s, l) { return s + (l.quantity * l.unitPrice) }, 0)
+        const discountForInvoice = allLines.reduce(function(s, l) { return s + (l.discount || 0) }, 0)
+
         const inv = await tx.invoice.create({
           data: {
             clinicId: ctx.clinicId,
@@ -150,8 +156,8 @@ export async function POST(req, props) {
             invoiceNo: invoiceNo,
             kind: 'VISIT_CHARGES',
             date: new Date(),
-            subtotal: vcSubtotal,
-            discount: vcLineDiscount + vcTotalDiscount,
+            subtotal: subtotalForInvoice,
+            discount: discountForInvoice,
             total: vcTotal,
             paid: vcPaid,
             balance: vcBalance,
