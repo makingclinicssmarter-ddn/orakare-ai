@@ -496,6 +496,14 @@ export default async function PatientRecordsPage(props) {
                             balance={balance}
                           />
                         )}
+                        <a
+                          href={'/api/treatments/' + t.id + '/statement'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+                        >
+                          Print statement
+                        </a>
                         <Link
                           href={'/dashboard/treatments/' + t.id}
                           className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"

@@ -3,20 +3,14 @@ import { db } from '@/lib/db'
 import { getDoctorContext, unauthorized, forbidden, notFoundResponse } from '@/lib/auth-helpers'
 
 // POST /api/treatments/[treatmentId]/record-payment
-// Body: { amount, mode, note?, date? }
+// Body: { amount, discount?, mode, note?, date? }
 //
-// Records a payment against a specific treatment. Creates:
-//   1. A Receipt row
-//   2. A PaymentAllocation row linking the Receipt to this Treatment
+// Push #7: now accepts an optional `discount` field. The discount is ADDED
+// to Treatment.discount (additive accumulation). The amount becomes a
+// Receipt + PaymentAllocation as before.
 //
-// Works for treatments in ANY status — including COMPLETED. The completion
-// stamp doesn't lock financials.
-//
-// Validation:
-//   - amount > 0
-//   - amount <= current treatment balance (no overpayment via this path —
-//     keeps the math clean; if she truly needs to record more than the
-//     estimate, she should edit the estimate first)
+// Either amount > 0 or discount > 0 (or both) must be provided.
+// Combined (amount + discount) must not exceed current treatment balance.
 
 export async function POST(req, props) {
   const params = await props.params
@@ -27,13 +21,17 @@ export async function POST(req, props) {
   if (!ctx.clinicId) return forbidden()
 
   const body = await req.json().catch(function() { return {} })
-  const amount = Number(body.amount)
+  const amount = Number(body.amount) || 0
+  const discount = Number(body.discount) || 0
   const mode = typeof body.mode === 'string' && body.mode ? body.mode : 'Cash'
   const note = typeof body.note === 'string' ? body.note.trim() : ''
   const dateStr = typeof body.date === 'string' && body.date ? body.date : null
 
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return NextResponse.json({ error: 'Amount must be greater than zero' }, { status: 400 })
+  if (amount <= 0 && discount <= 0) {
+    return NextResponse.json({ error: 'Provide a payment amount, a discount, or both' }, { status: 400 })
+  }
+  if (amount < 0 || discount < 0) {
+    return NextResponse.json({ error: 'Amount and discount cannot be negative' }, { status: 400 })
   }
 
   const treatment = await db.treatment.findFirst({
@@ -50,8 +48,7 @@ export async function POST(req, props) {
   })
   if (!treatment) return notFoundResponse()
 
-  // Compute current balance: estimate − discount − sum(allocations).
-  // Same formula used by computePatientFinances on the Records page.
+  // Current balance = estimate − existing discount − sum(allocations)
   const netEstimate = Math.max(0, Number(treatment.estimate || 0) - Number(treatment.discount || 0))
   const alreadyPaid = (treatment.paymentAllocations || []).reduce(function(s, a) {
     return s + Number(a.amount || 0)
@@ -63,10 +60,10 @@ export async function POST(req, props) {
       error: 'No outstanding balance on this treatment. Nothing to record.',
     }, { status: 400 })
   }
-  if (amount > currentBalance + 0.5) {
+  if (amount + discount > currentBalance + 0.5) {
     return NextResponse.json({
-      error: 'Amount ₹' + amount + ' exceeds outstanding balance ₹' + currentBalance.toFixed(0)
-           + '. Record only what was actually received, or edit the treatment estimate first.',
+      error: 'Amount + discount (₹' + (amount + discount).toFixed(0) + ') exceeds outstanding ₹' + currentBalance.toFixed(0)
+           + '. Reduce the amount or discount, or edit the treatment estimate first.',
     }, { status: 400 })
   }
 
@@ -78,29 +75,42 @@ export async function POST(req, props) {
 
   try {
     const result = await db.$transaction(async function(tx) {
-      const receipt = await tx.receipt.create({
-        data: {
-          clinicId: ctx.clinicId,
-          patientId: treatment.patientId,
-          amount: amount,
-          paymentMode: mode,
-          notes: note
-            ? 'Treatment payment — ' + treatmentLabel + ' — ' + note
-            : 'Treatment payment — ' + treatmentLabel,
-          date: receiptDate,
-          invoiceId: null,
-        },
-      })
+      // Step 1: apply discount additively if any
+      if (discount > 0) {
+        await tx.treatment.update({
+          where: { id: treatment.id },
+          data: { discount: Number(treatment.discount || 0) + discount },
+        })
+      }
 
-      await tx.paymentAllocation.create({
-        data: {
-          receiptId: receipt.id,
-          treatmentId: treatment.id,
-          amount: amount,
-        },
-      })
+      // Step 2: create Receipt + PaymentAllocation if there's a payment
+      let receiptId = null
+      if (amount > 0) {
+        const receipt = await tx.receipt.create({
+          data: {
+            clinicId: ctx.clinicId,
+            patientId: treatment.patientId,
+            amount: amount,
+            paymentMode: mode,
+            notes: note
+              ? 'Treatment payment — ' + treatmentLabel + ' — ' + note
+              : 'Treatment payment — ' + treatmentLabel,
+            date: receiptDate,
+            invoiceId: null,
+          },
+        })
 
-      return { receiptId: receipt.id, newBalance: Math.max(0, currentBalance - amount) }
+        await tx.paymentAllocation.create({
+          data: {
+            receiptId: receipt.id,
+            treatmentId: treatment.id,
+            amount: amount,
+          },
+        })
+        receiptId = receipt.id
+      }
+
+      return { receiptId, newBalance: Math.max(0, currentBalance - amount - discount) }
     })
 
     return NextResponse.json({ ok: true, ...result })

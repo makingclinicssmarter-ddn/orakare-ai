@@ -34,14 +34,14 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
   // Visit-charges state
   const [charges, setCharges] = useState([])
   const [invItems, setInvItems] = useState([])
-  const [totalDiscount, setTotalDiscount] = useState(0)
+  // Push #7: totalDiscount state removed. Round-off handled as a charges line.
   const [vcPayAmount, setVcPayAmount] = useState(0)
   const [vcPayMode, setVcPayMode] = useState('Cash')
 
   // Treatment payment state
   const [tpAmount, setTpAmount] = useState(0)
   const [tpMode, setTpMode] = useState('Cash')
-  const [tpAllocations, setTpAllocations] = useState([])  // [{ treatmentId, amount }]
+  const [tpAllocations, setTpAllocations] = useState([])  // [{ treatmentId, amount, discount }]
   const [tpUnallocated, setTpUnallocated] = useState(false)  // "Don't allocate" toggle
 
   // Push #4: which treatments should be marked complete on save.
@@ -61,18 +61,22 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
   const [error, setError] = useState(null)
 
   const vcTotals = useMemo(function() {
-    const chargesSubtotal = charges.reduce(function(s, c) { return s + (Number(c.amount) || 0) }, 0)
-    const chargesDiscount = charges.reduce(function(s, c) { return s + (Number(c.discount) || 0) }, 0)
-    const invSubtotal = invItems.reduce(function(s, i) { return s + (Number(i.quantity) * Number(i.unitPrice || 0)) }, 0)
-    const invDiscount = invItems.reduce(function(s, i) { return s + (Number(i.discount) || 0) }, 0)
-    const subtotal = chargesSubtotal + invSubtotal
-    const lineDiscount = chargesDiscount + invDiscount
-    const td = Number(totalDiscount) || 0
-    const grand = Math.max(0, subtotal - lineDiscount - td)
+    // Push #7: clean separated math.
+    // Charges line net: amount − discount (flat per row).
+    // Inventory line net: qty × (unitPrice − discPerUnit).
+    // Sub-totals shown separately, then combined.
+    const chargesNet = charges.reduce(function(s, c) {
+      return s + Math.max(0, (Number(c.amount) || 0) - (Number(c.discount) || 0))
+    }, 0)
+    const invNet = invItems.reduce(function(s, i) {
+      const netUnit = Math.max(0, (Number(i.unitPrice) || 0) - (Number(i.discount) || 0))
+      return s + (Number(i.quantity) || 0) * netUnit
+    }, 0)
+    const grand = chargesNet + invNet
     const paid = Number(vcPayAmount) || 0
     const balance = grand - paid
-    return { subtotal, lineDiscount, totalDiscount: td, grand, paid, balance }
-  }, [charges, invItems, totalDiscount, vcPayAmount])
+    return { chargesNet, invNet, grand, paid, balance }
+  }, [charges, invItems, vcPayAmount])
 
   const tpAllocTotal = useMemo(function() {
     return tpAllocations.reduce(function(s, a) { return s + (Number(a.amount) || 0) }, 0)
@@ -109,13 +113,14 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
           inventoryItems: invItems.map(function(i) {
             return { inventoryItemId: i.inventoryItemId, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, discount: i.discount || 0 }
           }),
-          totalDiscount: vcTotals.totalDiscount,
+          // Push #7: totalDiscount removed. Round-off is handled as a charges line.
           payment: vcTotals.paid > 0 ? { amount: vcTotals.paid, mode: vcPayMode } : null,
         },
         treatmentPayment: tpAmount > 0 ? {
           totalAmount: Number(tpAmount),
           mode: tpMode,
-          allocations: tpUnallocated ? [] : tpAllocations.filter(function(a) { return Number(a.amount) > 0 }),
+          // Push #7: each allocation can carry an optional discount that adds to Treatment.discount
+          allocations: tpUnallocated ? [] : tpAllocations.filter(function(a) { return Number(a.amount) > 0 || Number(a.discount) > 0 }),
         } : null,
         treatmentsToComplete: completedTreatmentIds,
         nextAppointment: nextApt,
@@ -169,15 +174,32 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
 
       {/* === SECTION 1: VISIT CHARGES === */}
       <div className="mt-6">
-        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">1 · Visit charges <span className="font-normal normal-case text-slate-400">— consumables, paid in full today</span></div>
+        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">1 · Visit charges <span className="font-normal normal-case text-slate-400">— consultation fees, materials &amp; medicines, paid in full today</span></div>
         <ChargesPanel presets={presets} charges={charges} setCharges={setCharges} />
         <InventoryPicker items={invItems} setItems={setInvItems} />
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Total discount (₹)</label>
-            <input type="number" min={0} value={totalDiscount} onChange={function(e) { setTotalDiscount(Number(e.target.value)) }}
-              className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Round off / adjustment</label>
+            <p className="text-xs text-slate-500 mb-2">To clean up totals (e.g. ₹823 → ₹800), add a round-off line in the Visit charges table above with a negative amount.</p>
+            <button
+              type="button"
+              onClick={function() {
+                setCharges(function(curr) {
+                  return curr.concat({
+                    tempId: 'round_' + Math.random().toString(36).slice(2, 8),
+                    label: 'Round off',
+                    amount: 0,
+                    discount: 0,
+                    category: null,
+                  })
+                })
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 font-medium"
+            >
+              + Add round off line
+            </button>
+            <p className="text-[10px] text-slate-400 mt-2">Tip: enter a negative amount on the round-off line to subtract.</p>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Payment received</label>
@@ -194,9 +216,18 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
 
         <div className="mt-3 bg-slate-50 rounded-xl border border-slate-200 p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><div className="text-xs text-slate-500">Subtotal</div><div className="font-medium mt-0.5">{formatINR(vcTotals.subtotal)}</div></div>
-            <div><div className="text-xs text-slate-500">Discount</div><div className="font-medium text-slate-700 mt-0.5">− {formatINR(vcTotals.lineDiscount + vcTotals.totalDiscount)}</div></div>
-            <div><div className="text-xs text-slate-500">Total</div><div className="font-medium mt-0.5">{formatINR(vcTotals.grand)}</div></div>
+            <div>
+              <div className="text-xs text-slate-500">Visit charges</div>
+              <div className="font-medium mt-0.5">{formatINR(vcTotals.chargesNet)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Materials &amp; medicines</div>
+              <div className="font-medium mt-0.5">{formatINR(vcTotals.invNet)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Total</div>
+              <div className="font-medium text-slate-900 mt-0.5">{formatINR(vcTotals.grand)}</div>
+            </div>
             <div>
               <div className="text-xs text-slate-500">{vcTotals.balance > 0 ? 'Balance due' : (vcTotals.balance < 0 ? 'Advance' : 'Settled')}</div>
               <div className={'font-medium mt-0.5 ' + (vcTotals.balance > 0.5 ? 'text-red-700' : 'text-slate-900')}>{formatINR(Math.abs(vcTotals.balance))}</div>

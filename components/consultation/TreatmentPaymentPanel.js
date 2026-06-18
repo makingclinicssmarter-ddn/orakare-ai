@@ -21,7 +21,7 @@ export default function TreatmentPaymentPanel({
   useEffect(function() {
     if (!activeTreatments || activeTreatments.length === 0) return
     if (allocations.length > 0) return
-    setAllocations(activeTreatments.map(function(t) { return { treatmentId: t.id, amount: 0 } }))
+    setAllocations(activeTreatments.map(function(t) { return { treatmentId: t.id, amount: 0, discount: 0 } }))
   }, [activeTreatments])
 
   // Push #3.5 Zip 2.2: removed the per-keystroke auto-fill effect that
@@ -50,7 +50,18 @@ export default function TreatmentPaymentPanel({
       if (existing) {
         return curr.map(function(a) { return a.treatmentId === treatmentId ? { ...a, amount: Number(amt) } : a })
       }
-      return curr.concat({ treatmentId, amount: Number(amt) })
+      return curr.concat({ treatmentId, amount: Number(amt), discount: 0 })
+    })
+  }
+
+  // Push #7: per-row discount input. Adds to Treatment.discount on save.
+  function updateAllocDiscount(treatmentId, disc) {
+    setAllocations(function(curr) {
+      const existing = curr.find(function(a) { return a.treatmentId === treatmentId })
+      if (existing) {
+        return curr.map(function(a) { return a.treatmentId === treatmentId ? { ...a, discount: Number(disc) } : a })
+      }
+      return curr.concat({ treatmentId, amount: 0, discount: Number(disc) })
     })
   }
 
@@ -103,6 +114,7 @@ export default function TreatmentPaymentPanel({
                 <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">Estimate</th>
                 <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">Paid</th>
                 <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">Balance</th>
+                <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500 w-28">Discount today</th>
                 <th className="text-right py-2.5 pl-3 text-xs font-medium text-slate-500 w-32">Allocate today</th>
               </tr>
             </thead>
@@ -113,6 +125,8 @@ export default function TreatmentPaymentPanel({
                 const bal = Math.max(0, est - paid)
                 const row = allocations.find(function(a) { return a.treatmentId === t.id })
                 const allocAmt = row ? row.amount : 0
+                const allocDisc = row ? (row.discount || 0) : 0
+                const balAfterDisc = Math.max(0, bal - allocDisc)
                 return (
                   <tr key={t.id} className="border-b border-slate-50 last:border-0">
                     <td className="py-3 pr-3">
@@ -121,7 +135,20 @@ export default function TreatmentPaymentPanel({
                     </td>
                     <td className="py-3 px-3 text-right text-slate-700">{formatINR(est)}</td>
                     <td className="py-3 px-3 text-right text-green-700">{formatINR(paid)}</td>
-                    <td className="py-3 px-3 text-right text-slate-700">{formatINR(bal)}</td>
+                    <td className="py-3 px-3 text-right text-slate-700">
+                      {formatINR(bal)}
+                      {allocDisc > 0 && (
+                        <div className="text-[10px] text-amber-700 mt-0.5">→ {formatINR(balAfterDisc)} after disc</div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <input
+                        type="number" min={0} value={allocDisc} disabled={unallocated}
+                        onChange={function(e) { updateAllocDiscount(t.id, e.target.value) }}
+                        placeholder="0"
+                        className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-slate-50 disabled:text-slate-400"
+                      />
+                    </td>
                     <td className="py-3 pl-3 text-right">
                       <input
                         type="number" min={0} value={allocAmt} disabled={unallocated}

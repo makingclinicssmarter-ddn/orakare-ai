@@ -112,7 +112,7 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
           </thead>
           <tbody>
             {charges.map(function(c) {
-              const net = Math.max(0, Number(c.amount || 0) - Number(c.discount || 0))
+              const net = Number(c.amount || 0) - Number(c.discount || 0)
               return (
                 <tr key={c.tempId} className="border-b border-slate-100">
                   <td className="py-2 px-2">
@@ -131,7 +131,6 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
                   <td className="py-2 px-2">
                     <input
                       type="number"
-                      min={0}
                       value={c.amount}
                       onChange={function(e) { updateRow(c.tempId, 'amount', Number(e.target.value)) }}
                       className="w-full h-9 border border-slate-200 rounded px-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -165,7 +164,7 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
               <td colSpan={3} className="py-2 px-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Visit charges sub-total</td>
               <td className="py-2 px-2 text-right text-sm font-semibold text-slate-900">
                 ₹{charges.reduce(function(s, c) {
-                  return s + Math.max(0, Number(c.amount || 0) - Number(c.discount || 0))
+                  return s + (Number(c.amount || 0) - Number(c.discount || 0))
                 }, 0).toLocaleString('en-IN')}
               </td>
               <td></td>
