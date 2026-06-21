@@ -10,8 +10,8 @@ function newCustomRow() {
     tempId: 'tmp_' + Math.random().toString(36).slice(2, 8),
     label: '',
     category: 'OTHER',
-    amount: 0,
-    discount: 0,
+    amount: '',
+    discount: '',
     custom: true,
   }
 }
@@ -31,28 +31,13 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
         label: p.label,
         category: p.category || 'OTHER',
         amount: p.amount,
-        discount: 0,
+        discount: '',
       })
     })
   }
 
   function addCustom() {
     setCharges(function(curr) { return curr.concat(newCustomRow()) })
-  }
-
-  // Push #7: round-off row — same structure as a custom charge, but with
-  // a fixed "Round off" label and rendered as static text. Amount editable
-  // (can be negative to subtract).
-  function addRoundOff() {
-    setCharges(function(curr) {
-      return curr.concat({
-        tempId: 'round_' + Math.random().toString(36).slice(2, 8),
-        label: 'Round off',
-        category: 'OTHER',
-        amount: 0,
-        discount: 0,
-      })
-    })
   }
 
   function updateRow(tempId, key, value) {
@@ -69,23 +54,13 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
     <div className="mt-4 bg-white rounded-xl border border-slate-200 p-5">
       <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
         <h2 className="text-sm font-medium text-slate-700">Charges</h2>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={addRoundOff}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
-            title="Add a round-off line (use a negative amount to subtract)"
-          >
-            + Round off
-          </button>
-          <button
-            type="button"
-            onClick={addCustom}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
-          >
-            + Custom charge
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={addCustom}
+          className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+        >
+          + Custom charge
+        </button>
       </div>
 
       {/* Presets — quick add buttons */}
@@ -158,7 +133,8 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
                     <input
                       type="number"
                       value={c.amount}
-                      onChange={function(e) { updateRow(c.tempId, 'amount', Number(e.target.value)) }}
+                      onChange={function(e) { updateRow(c.tempId, 'amount', e.target.value) }}
+                      placeholder="0"
                       className="w-full h-9 border border-slate-200 rounded px-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                   </td>
@@ -167,7 +143,8 @@ export default function ChargesPanel({ presets, charges, setCharges }) {
                       type="number"
                       min={0}
                       value={c.discount}
-                      onChange={function(e) { updateRow(c.tempId, 'discount', Number(e.target.value)) }}
+                      onChange={function(e) { updateRow(c.tempId, 'discount', e.target.value) }}
+                      placeholder="0"
                       className="w-full h-9 border border-slate-200 rounded px-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                   </td>

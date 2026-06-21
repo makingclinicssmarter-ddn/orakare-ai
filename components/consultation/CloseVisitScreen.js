@@ -34,18 +34,19 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
   // Visit-charges state
   const [charges, setCharges] = useState([])
   const [invItems, setInvItems] = useState([])
-  // Push #7: totalDiscount state removed. Round-off handled as a charges line.
-  const [vcPayAmount, setVcPayAmount] = useState(0)
+  // Push #8: roundOff sits between Total and what she collects.
+  // Empty string init so the field isn't pre-filled with "0" (Bug 6).
+  const [roundOff, setRoundOff] = useState('')
+  const [vcPayAmount, setVcPayAmount] = useState('')
   const [vcPayMode, setVcPayMode] = useState('Cash')
 
   // Treatment payment state
-  const [tpAmount, setTpAmount] = useState(0)
+  const [tpAmount, setTpAmount] = useState('')
   const [tpMode, setTpMode] = useState('Cash')
   const [tpAllocations, setTpAllocations] = useState([])  // [{ treatmentId, amount, discount }]
   const [tpUnallocated, setTpUnallocated] = useState(false)  // "Don't allocate" toggle
 
   // Push #4: which treatments should be marked complete on save.
-  // Set of treatmentId strings. Driven by checkboxes above Save button.
   const [completedTreatmentIds, setCompletedTreatmentIds] = useState([])
 
   function toggleComplete(treatmentId) {
@@ -61,10 +62,6 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
   const [error, setError] = useState(null)
 
   const vcTotals = useMemo(function() {
-    // Push #7: clean separated math.
-    // Charges line net: amount − discount (flat per row).
-    // Inventory line net: qty × (unitPrice − discPerUnit).
-    // Sub-totals shown separately, then combined.
     const chargesNet = charges.reduce(function(s, c) {
       return s + Math.max(0, (Number(c.amount) || 0) - (Number(c.discount) || 0))
     }, 0)
@@ -72,11 +69,15 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
       const netUnit = Math.max(0, (Number(i.unitPrice) || 0) - (Number(i.discount) || 0))
       return s + (Number(i.quantity) || 0) * netUnit
     }, 0)
-    const grand = chargesNet + invNet
+    const lineTotal = chargesNet + invNet
+    // Push #8 Bug 2: round off applies AFTER subtotal. Can be negative.
+    // Final grand total = lineTotal + roundOff (where roundOff is typically negative).
+    const ro = Number(roundOff) || 0
+    const grand = Math.max(0, lineTotal + ro)
     const paid = Number(vcPayAmount) || 0
     const balance = grand - paid
-    return { chargesNet, invNet, grand, paid, balance }
-  }, [charges, invItems, vcPayAmount])
+    return { chargesNet, invNet, lineTotal, roundOff: ro, grand, paid, balance }
+  }, [charges, invItems, roundOff, vcPayAmount])
 
   const tpAllocTotal = useMemo(function() {
     return tpAllocations.reduce(function(s, a) { return s + (Number(a.amount) || 0) }, 0)
@@ -113,7 +114,8 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
           inventoryItems: invItems.map(function(i) {
             return { inventoryItemId: i.inventoryItemId, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, discount: i.discount || 0 }
           }),
-          // Push #7: totalDiscount removed. Round-off is handled as a charges line.
+          // Push #7: totalDiscount removed. Round-off is a separate finishing adjustment.
+          roundOff: vcTotals.roundOff,
           payment: vcTotals.paid > 0 ? { amount: vcTotals.paid, mode: vcPayMode } : null,
         },
         treatmentPayment: tpAmount > 0 ? {
@@ -178,23 +180,9 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
         <ChargesPanel presets={presets} charges={charges} setCharges={setCharges} />
         <InventoryPicker items={invItems} setItems={setInvItems} />
 
-        <div className="mt-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Payment received</label>
-            <div className="flex gap-2">
-              <input type="number" min={0} value={vcPayAmount} onChange={function(e) { setVcPayAmount(Number(e.target.value)) }} placeholder="Amount"
-                className="flex-1 h-10 border border-slate-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
-              <select value={vcPayMode} onChange={function(e) { setVcPayMode(e.target.value) }}
-                className="h-10 border border-slate-200 rounded-lg px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                {PAY_MODES.map(function(m) { return <option key={m} value={m}>{m}</option> })}
-              </select>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-2">Tip: for round-offs (e.g. ₹823 → ₹800), use the &quot;+ Round off&quot; button in the Charges table and enter a negative amount.</p>
-          </div>
-        </div>
-
-        <div className="mt-3 bg-slate-50 rounded-xl border border-slate-200 p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div className="mt-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
+          {/* Sub-totals */}
+          <div className="grid grid-cols-2 gap-3 text-sm pb-3 border-b border-slate-200">
             <div>
               <div className="text-xs text-slate-500">Visit charges</div>
               <div className="font-medium mt-0.5">{formatINR(vcTotals.chargesNet)}</div>
@@ -203,14 +191,57 @@ export default function CloseVisitScreen({ visit, presets, initialAdvice, clinic
               <div className="text-xs text-slate-500">Materials &amp; medicines</div>
               <div className="font-medium mt-0.5">{formatINR(vcTotals.invNet)}</div>
             </div>
-            <div>
-              <div className="text-xs text-slate-500">Total</div>
-              <div className="font-medium text-slate-900 mt-0.5">{formatINR(vcTotals.grand)}</div>
+          </div>
+
+          {/* Push #8 Bug 2: Round off — adjusts the total, sits between Total and Pay */}
+          <div className="grid grid-cols-2 gap-3 items-center pt-3 pb-3 border-b border-slate-200">
+            <div className="flex items-baseline gap-2">
+              <label className="text-xs text-slate-500">Round off / adjustment</label>
+              <span className="text-[10px] text-slate-400">(negative to subtract)</span>
             </div>
-            <div>
-              <div className="text-xs text-slate-500">{vcTotals.balance > 0 ? 'Balance due' : (vcTotals.balance < 0 ? 'Advance' : 'Settled')}</div>
-              <div className={'font-medium mt-0.5 ' + (vcTotals.balance > 0.5 ? 'text-red-700' : 'text-slate-900')}>{formatINR(Math.abs(vcTotals.balance))}</div>
+            <div className="flex justify-end">
+              <input
+                type="number"
+                value={roundOff}
+                onChange={function(e) { setRoundOff(e.target.value) }}
+                placeholder="0"
+                className="w-32 h-9 border border-slate-200 rounded-lg px-3 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
             </div>
+          </div>
+
+          {/* Total */}
+          <div className="flex items-baseline justify-between pt-3">
+            <div className="text-sm font-medium text-slate-700">Total</div>
+            <div className="text-lg font-semibold text-slate-900">{formatINR(vcTotals.grand)}</div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Payment received</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={vcPayAmount}
+                onChange={function(e) { setVcPayAmount(e.target.value) }}
+                placeholder="Amount"
+                className="flex-1 h-10 border border-slate-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <select value={vcPayMode} onChange={function(e) { setVcPayMode(e.target.value) }}
+                className="h-10 border border-slate-200 rounded-lg px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                {PAY_MODES.map(function(m) { return <option key={m} value={m}>{m}</option> })}
+              </select>
+            </div>
+            {vcTotals.balance > 0 && (
+              <p className="text-xs text-amber-700 mt-2">Balance after this payment: {formatINR(vcTotals.balance)}</p>
+            )}
+            {vcTotals.balance < 0 && (
+              <p className="text-xs text-blue-700 mt-2">Advance: {formatINR(Math.abs(vcTotals.balance))}</p>
+            )}
+            {vcTotals.balance === 0 && vcTotals.paid > 0 && (
+              <p className="text-xs text-green-700 mt-2">Settled in full</p>
+            )}
           </div>
         </div>
       </div>

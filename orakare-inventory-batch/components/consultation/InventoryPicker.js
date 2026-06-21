@@ -57,7 +57,7 @@ export default function InventoryPicker({ items, setItems }) {
         name: it.name,
         quantity: 1,
         unitPrice: it.unitCost || 0,
-        discount: '',
+        discount: 0,
         stockQty: it.totalActive || 0,  // Push #5: batch sum, not stockQty legacy field
       })
     })
@@ -78,7 +78,7 @@ export default function InventoryPicker({ items, setItems }) {
 
   return (
     <div className="mt-4 bg-white rounded-xl border border-slate-200 p-5">
-      <h2 className="text-sm font-medium text-slate-700 mb-3">Materials &amp; medicines</h2>
+      <h2 className="text-sm font-medium text-slate-700 mb-3">Inventory dispensed</h2>
 
       {/* Search */}
       <div ref={containerRef} className="relative max-w-md mb-4">
@@ -87,7 +87,7 @@ export default function InventoryPicker({ items, setItems }) {
           value={search}
           onChange={function(e) { setSearch(e.target.value); setShowResults(true) }}
           onFocus={function() { setShowResults(true) }}
-          placeholder="Search materials & medicines by name…"
+          placeholder="Search inventory by name…"
           className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
         {showResults && search.length >= 1 && (
@@ -157,7 +157,7 @@ export default function InventoryPicker({ items, setItems }) {
                       type="number"
                       min={1}
                       value={i.quantity}
-                      onChange={function(e) { updateRow(i.tempId, 'quantity', e.target.value) }}
+                      onChange={function(e) { updateRow(i.tempId, 'quantity', Number(e.target.value)) }}
                       className="w-full h-9 border border-slate-200 rounded px-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                   </td>
@@ -166,7 +166,7 @@ export default function InventoryPicker({ items, setItems }) {
                       type="number"
                       min={0}
                       value={i.unitPrice}
-                      onChange={function(e) { updateRow(i.tempId, 'unitPrice', e.target.value) }}
+                      onChange={function(e) { updateRow(i.tempId, 'unitPrice', Number(e.target.value)) }}
                       className="w-full h-9 border border-slate-200 rounded px-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                   </td>
@@ -175,8 +175,7 @@ export default function InventoryPicker({ items, setItems }) {
                       type="number"
                       min={0}
                       value={i.discount}
-                      onChange={function(e) { updateRow(i.tempId, 'discount', e.target.value) }}
-                      placeholder="0"
+                      onChange={function(e) { updateRow(i.tempId, 'discount', Number(e.target.value)) }}
                       className="w-full h-9 border border-slate-200 rounded px-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                   </td>
@@ -196,7 +195,7 @@ export default function InventoryPicker({ items, setItems }) {
           </tbody>
           <tfoot>
             <tr className="border-t border-slate-200">
-              <td colSpan={4} className="py-2 px-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Materials &amp; medicines sub-total</td>
+              <td colSpan={4} className="py-2 px-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Inventory sub-total</td>
               <td className="py-2 px-2 text-right text-sm font-semibold text-slate-900">
                 ₹{items.reduce(function(s, it) {
                   const netUnit = Math.max(0, Number(it.unitPrice || 0) - Number(it.discount || 0))

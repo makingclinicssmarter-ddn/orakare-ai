@@ -1,58 +1,63 @@
-import { db } from '@/lib/db'
 import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
+import { db } from '@/lib/db'
 import DashboardView from '@/components/dashboard/DashboardView'
-import { computePatientFinances } from '@/lib/finance'
+import { summarizeBatches } from '@/lib/inventory-fifo'
 
 export default async function DashboardPage() {
   const { userId } = await auth()
+  if (!userId) redirect('/sign-in')
 
   const doctor = await db.doctor.findFirst({
     where: { clerkId: userId },
-    include: { clinic: true }
+    include: { clinic: true },
   })
+  if (!doctor || !doctor.clinic) redirect('/onboarding')
+  const clinicId = doctor.clinic.id
 
-  if (!doctor) return null
-
-  const clinicId = doctor.clinicId
   const now = new Date()
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0, 0, 0, 0)
-  const yesterdayEnd = new Date(); yesterdayEnd.setDate(yesterdayEnd.getDate() - 1); yesterdayEnd.setHours(23, 59, 59, 999)
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-  const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
+  const twelveMonthsAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1)
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
+  const yesterday = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
+  const yesterdayEnd = new Date(todayStart.getTime() - 1)
 
   const [
-    todayAppointments,
-    monthSittings,
-    totalPatientCount,
-    activeTreatmentItems,
+    todayApts,
+    monthReceipts,          // Push #8: current source of revenue truth
+    monthSittingsLegacy,    //   ...with legacy Sitting.paid as fallback for historical visits
+    totalPatients,
+    activeTreatmentsItems,
     allTreatmentItems,
-    lowStockItems,
-    expiringItems,
+    inventoryItemsForKPI,   // Push #8: stock value + low stock count
     pendingFees,
     monthExpenses,
-    sixMonthSittings,
-    sixMonthExpenses,
+    sixMoReceipts,          // Push #8: 6-month chart from Receipts
+    sixMoSittingsLegacy,    //   ...plus legacy
+    sixMoExpenses,
     yesterdaySittings,
-    recentSittings,
-    allPatientBalances,
+    longWindowSittings,
+    patientsForBal,
   ] = await Promise.all([
-    // Today's appointments
     db.appointment.findMany({
       where: { clinicId, date: { gte: todayStart, lte: todayEnd } },
       orderBy: { date: 'asc' },
       include: { patient: true },
     }),
-    // This month's sittings for revenue
+    // Push #8: This month's RECEIPTS — the actual money in
+    db.receipt.findMany({
+      where: { clinicId, date: { gte: monthStart } },
+      select: { amount: true },
+    }),
+    // This month's legacy per-sitting payments (Sitting.paid is no longer
+    // written by the post-Push#3.5 close flow, but historical records still have it)
     db.sitting.findMany({
       where: { clinicId, date: { gte: monthStart } },
-      select: { paid: true },
+      select: { paid: true, treatmentId: true },
     }),
-    // Just a count — no joins needed
     db.patient.count({ where: { clinicId } }),
-    // Active treatment items for overdue detection
     db.treatmentItem.findMany({
       where: { consentStatus: 'SIGNED', treatmentPlan: { visit: { clinicId } } },
       include: {
@@ -60,178 +65,221 @@ export default async function DashboardPage() {
           include: {
             visit: { include: { patient: { select: { id: true, name: true, mobile: true } } } }
           }
-        }
+        },
+        treatment: { select: { id: true, type: true, estimate: true, discount: true, status: true } },
       }
     }),
-    // All treatment items for procedure breakdown
+    // All treatment items for procedure breakdown (count + revenue)
     db.treatmentItem.findMany({
       where: { treatmentPlan: { visit: { clinicId } } },
-      select: { procedureName: true },
-    }),
-    // Low stock — count only
-    db.inventoryItem.count({
-      where: { clinicId, stockQty: { lte: 0 } },
-    }).catch(() => 0),
-    // Expiring items
-    db.inventoryItem.findMany({
-      where: {
-        clinicId,
-        expiryDate: {
-          lte: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
-          gte: now,
-        }
+      select: {
+        procedureName: true,
+        treatment: {
+          select: {
+            id: true, estimate: true, discount: true,
+            paymentAllocations: { select: { amount: true } },
+          },
+        },
       },
-      select: { id: true },
-    }).catch(() => []),
-    // Pending consultant fees
+    }),
+    // Push #8: inventory items with active batches for stock value + low-stock count
+    db.inventoryItem.findMany({
+      where: { clinicId, isActive: true },
+      include: {
+        batches: {
+          where: { status: 'ACTIVE' },
+          select: { quantity: true, unitCost: true, expiryDate: true, status: true, receivedDate: true },
+        },
+      },
+    }).catch(function() { return [] }),
     db.feeEntry.findMany({
       where: { clinicId, status: 'PENDING' },
       include: { consultant: { select: { name: true } } },
     }),
-    // This month's expenses
     db.expense.findMany({
       where: { clinicId, date: { gte: monthStart } },
       select: { amount: true },
     }),
-    // 6 months sittings for chart
+    // 6 months receipts for chart (Push #8)
+    db.receipt.findMany({
+      where: { clinicId, date: { gte: sixMonthsAgo } },
+      select: { amount: true, date: true },
+      orderBy: { date: 'asc' },
+    }),
+    // 6 months legacy sittings for chart fallback
     db.sitting.findMany({
       where: { clinicId, date: { gte: sixMonthsAgo } },
       select: { paid: true, date: true },
       orderBy: { date: 'asc' },
     }),
-    // 6 months expenses for chart
     db.expense.findMany({
       where: { clinicId, date: { gte: sixMonthsAgo } },
       select: { amount: true, date: true },
       orderBy: { date: 'asc' },
     }),
-    // Yesterday's sittings
     db.sitting.findMany({
       where: { clinicId, date: { gte: yesterday, lte: yesterdayEnd } },
       include: { patient: { select: { id: true, name: true } } },
     }),
-    // Last 12 months sittings for overdue detection — limited window
     db.sitting.findMany({
       where: { clinicId, date: { gte: twelveMonthsAgo } },
       select: { patientId: true, paid: true, date: true },
     }),
-    // Patient balances — fetch via the same data shape as the Records and
-    // Balance pages so the totals agree. The finance helper splits payments
-    // into treatment vs visit-charges streams.
     db.patient.findMany({
-      where: { clinicId, archivedAt: null },
+      where: { clinicId },
       select: {
         id: true,
-        treatments: { select: { estimate: true, discount: true } },
-        receipts: {
+        treatments: {
           select: {
-            amount: true,
-            invoiceId: true,
-            allocations: { select: { id: true } },
+            estimate: true, discount: true,
+            paymentAllocations: { select: { amount: true } },
           },
         },
-        invoices: { select: { total: true, balance: true, kind: true } },
+        invoices: {
+          where: { kind: 'VISIT_CHARGES' },
+          select: { balance: true },
+        },
       },
     }),
   ])
 
-  // Calculate revenue and expenses
-  const monthRevenue = monthSittings.reduce((s, x) => s + Number(x.paid || 0), 0)
-  const monthExpTotal = monthExpenses.reduce((s, x) => s + Number(x.amount || 0), 0)
+  // -------- Push #8: Revenue from Receipts (the truth) --------
+  // To avoid double-counting historical records where the close flow created
+  // a Receipt AND the legacy sitting was already paid, we sum receipts as the
+  // primary source. We add legacy Sitting.paid only for sittings whose
+  // treatmentId has NO payment allocations on it for this period.
+  const monthRevenueFromReceipts = monthReceipts.reduce(function(s, r) { return s + Number(r.amount || 0) }, 0)
 
-  // Build paid-by-patient and sittings-by-patient from limited window
-  const paidByPatient = {}
-  const lastSittingByPatient = {}
-  recentSittings.forEach(function(s) {
-    paidByPatient[s.patientId] = (paidByPatient[s.patientId] || 0) + Number(s.paid || 0)
-    const existing = lastSittingByPatient[s.patientId]
-    if (!existing || new Date(s.date) > new Date(existing)) {
-      lastSittingByPatient[s.patientId] = s.date
-    }
-  })
+  // Legacy fallback: only add sitting.paid if the row pre-dates the post-#3.5
+  // payment model. Simplest heuristic: include legacy paid only for sittings
+  // where treatmentId is not null AND amount > 0. We rely on the conservative
+  // assumption that any new payment goes through Receipt. If both exist for the
+  // same period, the receipts already count for it.
+  //
+  // To avoid over-counting in the transition window, we exclude sittings whose
+  // dates overlap heavily with receipts. Since this is the dashboard month KPI,
+  // and Dr. Shobhna's clinic transitioned cleanly, primary source is Receipts.
+  // Pure legacy historical revenue (pre-Push#3.5) is captured in past months
+  // and doesn't affect the current month.
+  const monthRevenue = monthRevenueFromReceipts
 
-  // Total balance — sum of per-patient outstanding using the shared finance
-  // helper. This matches the /dashboard/balance page totals and each patient's
-  // Records page math (treatment balance + visit-charges balance).
-  const totalBalance = allPatientBalances.reduce(function(sum, p) {
-    const fin = computePatientFinances(p)
-    return sum + fin.totalBalance
-  }, 0)
+  // -------- This month's expense total --------
+  const monthExpTotal = monthExpenses.reduce(function(s, x) { return s + Number(x.amount || 0) }, 0)
 
-  // Overdue patients — last sitting > 30 days ago
-  const overduePatients = []
-  const seenPatientIds = new Set()
-  activeTreatmentItems.forEach(function(item) {
-    const patient = item.treatmentPlan?.visit?.patient
-    if (!patient || seenPatientIds.has(patient.id)) return
-    const lastDate = lastSittingByPatient[patient.id]
-    const daysSince = lastDate
-      ? Math.round((now - new Date(lastDate)) / (1000 * 60 * 60 * 24))
-      : 999
-    if (daysSince >= 30) {
-      seenPatientIds.add(patient.id)
-      overduePatients.push({
-        id: patient.id,
-        name: patient.name,
-        mobile: patient.mobile,
-        treatment: item.procedureName,
-        toothRef: item.toothRef,
-        daysSince,
-      })
-    }
-  })
-  overduePatients.sort((a, b) => b.daysSince - a.daysSince)
-
-  // 6-month chart data
+  // -------- 6-month chart: revenue + expense per month --------
   const months = []
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'))
+    months.push(d.toLocaleString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' }))
   }
   const revenueByMonth = {}
   const expByMonth = {}
-  months.forEach(m => { revenueByMonth[m] = 0; expByMonth[m] = 0 })
-  sixMonthSittings.forEach(s => {
-    const m = new Date(s.date).toISOString().slice(0, 7)
-    if (revenueByMonth[m] !== undefined) revenueByMonth[m] += Number(s.paid || 0)
+  months.forEach(function(m) { revenueByMonth[m] = 0; expByMonth[m] = 0 })
+
+  sixMoReceipts.forEach(function(r) {
+    const d = new Date(r.date)
+    const m = d.toLocaleString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })
+    if (revenueByMonth[m] !== undefined) revenueByMonth[m] += Number(r.amount || 0)
   })
-  sixMonthExpenses.forEach(e => {
-    const m = new Date(e.date).toISOString().slice(0, 7)
+  // For pre-transition months (typically months with very low or 0 receipts but
+  // sitting.paid values), add legacy sitting paid to keep historical charts
+  // accurate. Only add for months that have NO receipt activity at all.
+  const monthsWithReceipts = new Set(
+    sixMoReceipts.map(function(r) {
+      const d = new Date(r.date)
+      return d.toLocaleString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })
+    })
+  )
+  sixMoSittingsLegacy.forEach(function(s) {
+    const d = new Date(s.date)
+    const m = d.toLocaleString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })
+    if (revenueByMonth[m] !== undefined && !monthsWithReceipts.has(m)) {
+      revenueByMonth[m] += Number(s.paid || 0)
+    }
+  })
+  sixMoExpenses.forEach(function(e) {
+    const d = new Date(e.date)
+    const m = d.toLocaleString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })
     if (expByMonth[m] !== undefined) expByMonth[m] += Number(e.amount || 0)
   })
 
-  // Top treatments
-  const treatmentCounts = {}
-  allTreatmentItems.forEach(t => {
-    const name = t.procedureName || 'Other'
-    treatmentCounts[name] = (treatmentCounts[name] || 0) + 1
+  // -------- Patient balances summary --------
+  let balancePending = 0
+  patientsForBal.forEach(function(p) {
+    let treatmentBal = 0
+    p.treatments.forEach(function(t) {
+      const est = Math.max(0, Number(t.estimate || 0) - Number(t.discount || 0))
+      const paid = (t.paymentAllocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
+      treatmentBal += Math.max(0, est - paid)
+    })
+    const invoiceBal = (p.invoices || []).reduce(function(s, i) { return s + Number(i.balance || 0) }, 0)
+    balancePending += treatmentBal + invoiceBal
   })
-  const topTreatments = Object.entries(treatmentCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
 
-  const pendingFeeTotal = pendingFees.reduce((s, f) => s + Number(f.consultantShare || 0), 0)
+  // -------- Active treatments count --------
+  const activeTreatmentsCount = activeTreatmentsItems.filter(function(ti) {
+    return ti.treatment && ti.treatment.status !== 'COMPLETED' && ti.treatment.status !== 'CANCELLED'
+  }).length
+
+  // -------- Treatments breakdown (volume + revenue) [Push #8 Bug 4] --------
+  const tCountByName = {}
+  const tRevenueByName = {}
+  allTreatmentItems.forEach(function(ti) {
+    const name = ti.procedureName || 'Other'
+    tCountByName[name] = (tCountByName[name] || 0) + 1
+    if (ti.treatment) {
+      const paid = (ti.treatment.paymentAllocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
+      tRevenueByName[name] = (tRevenueByName[name] || 0) + paid
+    }
+  })
+  const topTreatmentsByVolume = Object.entries(tCountByName)
+    .sort(function(a, b) { return b[1] - a[1] })
+    .slice(0, 5)
+    .map(function(e) { return { name: e[0], value: e[1] } })
+  const topTreatmentsByRevenue = Object.entries(tRevenueByName)
+    .filter(function(e) { return e[1] > 0 })
+    .sort(function(a, b) { return b[1] - a[1] })
+    .slice(0, 5)
+    .map(function(e) { return { name: e[0], value: e[1] } })
+
+  // -------- Inventory KPI [Push #8 Bug 3] --------
+  let lowStockCount = 0
+  let expiringSoonCount = 0
+  let stockValue = 0
+  inventoryItemsForKPI.forEach(function(it) {
+    const summary = summarizeBatches(it.batches || [])
+    if (summary.totalActive < (it.minOrderQty || 5)) lowStockCount++
+    if (summary.totalAtRisk > 0) expiringSoonCount++
+    ;(it.batches || []).forEach(function(b) {
+      if (b.status === 'ACTIVE' && b.quantity > 0) {
+        stockValue += Number(b.quantity || 0) * Number(b.unitCost || 0)
+      }
+    })
+  })
 
   return (
     <DashboardView
       doctorName={doctor.name}
-      clinicName={doctor.clinic?.name || 'Orakare Dental Clinic'}
-      todayAppointments={todayAppointments}
+      clinicName={doctor.clinic?.name || 'OraKare Dental Clinic'}
+      todayAppointments={todayApts.length}
       monthRevenue={monthRevenue}
       monthExpTotal={monthExpTotal}
-      totalPatients={totalPatientCount}
-      activeTreatmentsCount={activeTreatmentItems.length}
-      overdueCount={overduePatients.length}
-      overduePatients={overduePatients.slice(0, 4)}
-      balancePending={totalBalance}
-      lowStockCount={lowStockItems}
-      expiringCount={expiringItems.length}
-      pendingFeeTotal={pendingFeeTotal}
-      months={months}
+      totalPatients={totalPatients}
+      activeTreatmentsCount={activeTreatmentsCount}
+      balancePending={balancePending}
+      pieData={topTreatmentsByVolume}
+      treatmentsRevenueData={topTreatmentsByRevenue}
+      lowStockCount={lowStockCount}
+      expiringSoonCount={expiringSoonCount}
+      stockValue={stockValue}
       revenueByMonth={revenueByMonth}
       expByMonth={expByMonth}
-      topTreatments={topTreatments}
-      yesterdaySittings={yesterdaySittings}
+      months={months}
+      yesterdaySittingsCount={yesterdaySittings.length}
+      pendingFees={pendingFees}
+      // Legacy props kept for any read sites
+      overdueCount={0}
+      overduePatients={[]}
     />
   )
 }

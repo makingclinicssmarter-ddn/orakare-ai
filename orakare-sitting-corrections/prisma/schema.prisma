@@ -1,0 +1,691 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── CLINIC ───────────────────────────────────────────────────────────────────
+
+model Clinic {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  phone     String?
+  email     String?
+  qualification    String?
+regNo            String?
+gstNo            String?
+googleReviewUrl  String?
+invoicePrefix    String?  @default("OKR")
+
+  // Push #3: charge presets for Close-visit screen.
+  // Format: [{ id, label, category, amount, active }]
+  // Categories: "CONSULTATION" | "RADIOGRAPH" | "OTHER" (free text allowed)
+  charges          Json     @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctors  Doctor[]
+  patients Patient[]
+  treatments   Treatment[]
+  sittings     Sitting[]
+  invoices     Invoice[]
+  receipts     Receipt[]
+  consultants  Consultant[]
+  feeEntries   FeeEntry[]
+  inventory    InventoryItem[]
+  expenses     Expense[]
+  appointments Appointment[]
+  visits    Visit[]
+}
+
+// ─── DOCTOR ───────────────────────────────────────────────────────────────────
+
+model Doctor {
+  id           String   @id @default(cuid())
+  clinicId     String
+  clerkId       String? @unique
+  name         String
+  email        String   @unique
+  phone        String?
+  qualification String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  visits           Visit[]
+  auditLogs        AuditLog[]
+
+  @@index([clinicId])
+}
+
+// ─── PATIENT ──────────────────────────────────────────────────────────────────
+
+model Patient {
+  id        String   @id @default(cuid())
+  clinicId  String
+  name      String
+  age       Int
+  gender    String
+  mobile    String
+  abhaId    String?
+  originalID String?
+  address    String?
+  dentalHistory    Json?
+  personalHistory  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  archivedAt DateTime?
+
+  clinic    Clinic    @relation(fields: [clinicId], references: [id])
+  visits    Visit[]
+  followUps FollowUp[]
+  treatments   Treatment[]
+  sittings     Sitting[]
+  invoices     Invoice[]
+  receipts     Receipt[]
+  appointments Appointment[]
+
+  @@index([clinicId])
+  @@index([clinicId, createdAt])
+  @@index([clinicId, archivedAt])
+  @@index([mobile])
+}
+
+// ─── VISIT ────────────────────────────────────────────────────────────────────
+
+model Visit {
+  id        String      @id @default(cuid())
+  clinicId  String
+  patientId String
+  doctorId  String
+  status    VisitStatus @default(REGISTERED)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Push #3: visit-flow redesign
+  outcome             VisitOutcome?  // null for legacy/imported visits
+  advice              String?
+  nextAppointmentDate DateTime?
+  needsResolution     Boolean       @default(false)
+
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  doctor           Doctor            @relation(fields: [doctorId], references: [id])
+  medicalHistory   MedicalHistory?
+  examConsent      ExamConsent?
+  clinicalFindings ClinicalFindings?
+  diagnosis        Diagnosis?
+  treatmentPlan    TreatmentPlan?
+  clinicalRecord   ClinicalRecord?
+  communications   Communication[]
+  followUps        FollowUp[]
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([clinicId, status])
+  @@index([clinicId, createdAt])
+  @@index([clinicId, needsResolution])
+}
+
+enum VisitOutcome {
+  ADVISED    // examined ± plan, no consent today
+  CONSENTED  // consent signed, no sitting today (deferred)
+  TREATED    // consent + at least one sitting done today
+}
+
+enum VisitStatus {
+  REGISTERED
+  HISTORY_TAKEN
+  EXAM_CONSENT_SIGNED
+  EXAMINATION_DONE
+  DIAGNOSIS_DONE
+  TREATMENT_PLANNED
+  TREATMENT_CONSENT_SIGNED
+  COMPLETED
+}
+
+// ─── MEDICAL HISTORY ──────────────────────────────────────────────────────────
+
+model MedicalHistory {
+  id             String   @id @default(cuid())
+  visitId        String   @unique
+  chiefComplaint String
+  allergies      Json     @default("[]")
+  conditions     Json     @default("[]")
+  medications    Json     @default("[]")
+  collectedBy    String
+  createdAt      DateTime @default(now())
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── EXAM CONSENT ─────────────────────────────────────────────────────────────
+
+model ExamConsent {
+  id          String   @id @default(cuid())
+  visitId     String   @unique
+  signedAt    DateTime @default(now())
+  signatureUrl String?
+  ipAddress   String?
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── CLINICAL FINDINGS ────────────────────────────────────────────────────────
+
+model ClinicalFindings {
+  id               String   @id @default(cuid())
+  visitId          String   @unique
+  toothFindings    Json     @default("[]")
+  aiSuggestions    Json     @default("[]")
+  clinicalNotes    String?
+
+  // Push #4 Wave 2 — split clinical findings.
+  // New visits write to these. Old visits keep their data in clinicalNotes;
+  // UI reads clinicalFindings first, falls back to clinicalNotes.
+  clinicalFindings       String?
+  radiographicalFindings String?
+
+  voiceTranscript  String?
+  images           Json     @default("[]")
+  examStartedAt    DateTime?
+  examCompletedAt  DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── DIAGNOSIS ────────────────────────────────────────────────────────────────
+
+model Diagnosis {
+  id          String   @id @default(cuid())
+  visitId     String   @unique
+  diagnoses   Json     @default("[]")
+  finalizedAt DateTime @default(now())
+  finalizedBy String
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── TREATMENT PLAN ───────────────────────────────────────────────────────────
+
+model TreatmentPlan {
+  id         String   @id @default(cuid())
+  visitId    String   @unique
+  approvedBy String
+  approvedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  visit          Visit           @relation(fields: [visitId], references: [id])
+  treatmentItems TreatmentItem[]
+}
+
+model TreatmentItem {
+  id              String          @id @default(cuid())
+  treatmentPlanId String
+  procedureName   String
+  toothRef        String?
+  urgency         TreatmentUrgency @default(PLANNED)
+  estimatedCost   Float?
+  estimatedSessions Int?
+  consentStatus   ConsentStatus   @default(PENDING)
+  consentSignedAt DateTime?
+  consentDocUrl   String?
+  treatment        Treatment?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  treatmentPlan TreatmentPlan @relation(fields: [treatmentPlanId], references: [id])
+  followUps     FollowUp[]
+  originalID String?
+  sittings Sitting[]
+
+  @@index([treatmentPlanId])
+  @@index([consentStatus])
+}
+
+enum TreatmentUrgency {
+  URGENT
+  SOON
+  PLANNED
+  MONITOR
+}
+
+enum ConsentStatus {
+  PENDING
+  SIGNED
+  DECLINED
+}
+
+// ─── CLINICAL RECORD ──────────────────────────────────────────────────────────
+
+model ClinicalRecord {
+  id          String    @id @default(cuid())
+  visitId     String    @unique
+  generatedAt DateTime  @default(now())
+  lockedAt    DateTime?
+  lockedBy    String?
+  fhirBundle  Json?
+  pdfUrl      String?
+  editLog     Json      @default("[]")
+
+  visit Visit @relation(fields: [visitId], references: [id])
+}
+
+// ─── FOLLOW UP ────────────────────────────────────────────────────────────────
+
+model FollowUp {
+  id              String       @id @default(cuid())
+  patientId       String
+  visitId         String
+  treatmentItemId String?
+  dueDate         DateTime
+  status          FollowUpStatus @default(PENDING)
+  reminderSentAt  DateTime?
+  confirmedAt     DateTime?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  patient       Patient        @relation(fields: [patientId], references: [id])
+  visit         Visit          @relation(fields: [visitId], references: [id])
+  treatmentItem TreatmentItem? @relation(fields: [treatmentItemId], references: [id])
+
+  @@index([patientId])
+  @@index([visitId])
+  @@index([treatmentItemId])
+  @@index([status, dueDate])
+}
+
+enum FollowUpStatus {
+  PENDING
+  REMINDED
+  CONFIRMED
+  COMPLETED
+  OVERDUE
+}
+
+// ─── COMMUNICATION ────────────────────────────────────────────────────────────
+
+model Communication {
+  id        String            @id @default(cuid())
+  visitId   String
+  type      CommunicationType
+  channel   String
+  sentAt    DateTime          @default(now())
+  status    String
+  content   String?
+
+  visit Visit @relation(fields: [visitId], references: [id])
+
+  @@index([visitId])
+}
+
+enum CommunicationType {
+  VISIT_SUMMARY
+  TREATMENT_PLAN
+  FOLLOW_UP_REMINDER
+  RECALL
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  actorId    String
+  actorRole  String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  doctor Doctor? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+// ─── TREATMENT (clinic treatment record, replaces Google Sheets Treatments) ───
+
+model Treatment {
+  id               String    @id @default(cuid())
+  clinicId         String
+  patientId        String
+  visitId          String?
+  type             String
+  area             String?
+  notes            String?
+  estimate         Float?
+  discount         Float?    @default(0)
+  expectedSittings Int?
+  status           TreatmentStatus @default(PLANNED)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  consultantId     String?
+  splitType        String?
+  splitValue       Float?
+  treatmentItemId  String?   @unique
+  treatmentItem    TreatmentItem? @relation(fields: [treatmentItemId], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  //sittings Sitting[]
+  clinic      Clinic      @relation(fields: [clinicId], references: [id])
+  patient     Patient     @relation(fields: [patientId], references: [id])
+  consultant  Consultant? @relation(fields: [consultantId], references: [id])
+  feeEntries  FeeEntry[]
+  allocations      PaymentAllocation[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([visitId])
+  @@index([consultantId])
+  @@index([clinicId, status])
+}
+
+enum TreatmentStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ─── SITTING (per-visit treatment session) ────────────────────────────────────
+
+model Sitting {
+  id              String   @id @default(cuid())
+  treatmentId     String
+  patientId       String
+  clinicId        String
+  date            DateTime
+  done            Boolean  @default(false)
+  prescription    String?
+  notes           String?
+  consumables     Json     @default("[]")
+  consumablesTotal Float?  @default(0)
+  paid            Float?   @default(0)
+  payMode         String?
+  savedAt         DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  description String?
+
+  // Push #5: append-only correction log. Each entry { note, addedAt, addedBy }.
+  // Original sitting fields stay immutable; this preserves the audit trail.
+  corrections     Json     @default("[]")
+  treatmentItem TreatmentItem @relation(fields: [treatmentId], references: [id])
+  patient   Patient   @relation(fields: [patientId], references: [id])
+  clinic    Clinic    @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([treatmentId])
+  @@index([clinicId, date])
+}
+
+// ─── INVOICE ──────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id          String        @id @default(cuid())
+  clinicId    String
+  patientId   String
+  invoiceNo   String        @unique
+  date        DateTime      @default(now())
+  subtotal    Float         @default(0)
+  discount    Float         @default(0)
+  total       Float         @default(0)
+  paid        Float         @default(0)
+  balance     Float         @default(0)
+  paymentMode String?
+  notes       String?
+  status      InvoiceStatus @default(UNPAID)
+
+  // Push #3.5: distinguishes visit-charge invoices (consultation, X-ray,
+  // dispensed inventory) from treatment invoices (historical imports).
+  // The finance helper filters visit-charges section by kind.
+  kind        InvoiceKind   @default(VISIT_CHARGES)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  clinic     Clinic        @relation(fields: [clinicId], references: [id])
+  patient    Patient       @relation(fields: [patientId], references: [id])
+  items      InvoiceItem[]
+  feeEntries FeeEntry[]
+  receipts   Receipt[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([clinicId, date])
+  @@index([clinicId, status])
+  @@index([clinicId, kind])
+}
+
+enum InvoiceKind {
+  VISIT_CHARGES
+  TREATMENT
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float
+  total       Float
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+// ─── RECEIPT ──────────────────────────────────────────────────────────────────
+
+model Receipt {
+  id          String   @id @default(cuid())
+  clinicId    String
+  patientId   String
+  invoiceId   String?
+  amount      Float
+  date        DateTime @default(now())
+  paymentMode String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  clinic      Clinic               @relation(fields: [clinicId], references: [id])
+  patient     Patient              @relation(fields: [patientId], references: [id])
+  invoice     Invoice?             @relation(fields: [invoiceId], references: [id])
+  allocations PaymentAllocation[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([invoiceId])
+  @@index([clinicId, date])
+}
+
+model PaymentAllocation {
+  id          String    @id @default(cuid())
+  receiptId   String
+  treatmentId String
+  amount      Float
+  note        String?
+  createdAt   DateTime  @default(now())
+
+  receipt     Receipt   @relation(fields: [receiptId], references: [id])
+  treatment   Treatment @relation(fields: [treatmentId], references: [id])
+
+  @@index([receiptId])
+  @@index([treatmentId])
+}
+// ─── CONSULTANT ───────────────────────────────────────────────────────────────
+
+model Consultant {
+  id             String   @id @default(cuid())
+  clinicId       String
+  name           String
+  specialization String?
+  phone          String?
+  email          String?
+  splitType      String?
+  splitValue     Float?
+  notes          String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  clinic     Clinic     @relation(fields: [clinicId], references: [id])
+  treatments Treatment[]
+  feeEntries FeeEntry[]
+
+  @@index([clinicId])
+}
+
+// ─── FEE ENTRY (revenue split tracking) ──────────────────────────────────────
+
+model FeeEntry {
+  id               String   @id @default(cuid())
+  clinicId         String
+  invoiceId        String?
+  consultantId     String
+  treatmentId      String?
+  totalCollected   Float
+  clinicShare      Float
+  consultantShare  Float
+  splitType        String?
+  splitValue       Float?
+  status           FeeStatus @default(PENDING)
+  paidDate         DateTime?
+  payMode          String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  clinic      Clinic      @relation(fields: [clinicId], references: [id])
+  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+  consultant  Consultant  @relation(fields: [consultantId], references: [id])
+  treatment   Treatment?  @relation(fields: [treatmentId], references: [id])
+
+  @@index([clinicId])
+  @@index([consultantId])
+  @@index([invoiceId])
+  @@index([treatmentId])
+  @@index([clinicId, status])
+}
+
+enum FeeStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+// ─── INVENTORY ────────────────────────────────────────────────────────────────
+
+model InventoryItem {
+  id          String   @id @default(cuid())
+  clinicId    String
+  name        String
+  category    String?
+  unit        String?
+  stockQty    Float    @default(0)
+  minStock    Float?   @default(0)
+  unitCost    Float?
+  supplier    String?
+  expiryDate  DateTime?
+  notes       String?
+  lastUpdated DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+}
+
+// ─── EXPENSE ──────────────────────────────────────────────────────────────────
+
+model Expense {
+  id          String   @id @default(cuid())
+  clinicId    String
+  description String
+  category    String?
+  amount      Float
+  date        DateTime @default(now())
+  payee       String?
+  paymentMode String?
+  notes       String?
+  recurring   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([clinicId, date])
+}
+
+// ─── APPOINTMENT ──────────────────────────────────────────────────────────────
+
+model Appointment {
+  id              String            @id @default(cuid())
+  clinicId        String
+  patientId       String?
+  name            String
+  phone           String?
+  email           String?
+  service         String?
+  date            DateTime
+  slot            String?
+  notes           String?
+  status          AppointmentStatus @default(SCHEDULED)
+  calendarEventId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  clinic  Clinic   @relation(fields: [clinicId], references: [id])
+  patient Patient? @relation(fields: [patientId], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([clinicId, date])
+  @@index([clinicId, status])
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// ─── CLINIC COUNTER (atomic sequence generation) ──────────────────────────────
+// Replaces the count()+1 pattern for Patient and Invoice numbers.
+// Push #1: prevents duplicate IDs under concurrent registrations / invoicing.
+
+model ClinicCounter {
+  id        String   @id @default(cuid())
+  clinicId  String
+  kind      String   // "PATIENT" | "INVOICE"
+  lastValue Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clinicId, kind])
+}

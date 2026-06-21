@@ -1,231 +1,229 @@
 'use client'
+import { useState, useEffect } from 'react'
 
-import { useState } from 'react'
-
-function getMonthRange(from, to) {
-  const months = []
-  const cur = new Date(from + '-01')
-  const end = new Date(to + '-01')
-  while (cur <= end) {
-    months.push(cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0'))
-    cur.setMonth(cur.getMonth() + 1)
-  }
-  return months
+function formatINR(n) {
+  return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 }
 
-function inRange(dateStr, from, to) {
-  const m = (dateStr || '').slice(0, 7)
-  return m >= from && m <= to
+function formatDate(iso) {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata',
+    })
+  } catch (e) { return '—' }
 }
 
-export default function FinanceView({ sittings, expenses, feeEntries }) {
+function startOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+function endOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0)
+}
+function toYMD(d) {
+  const tz = 'Asia/Kolkata'
+  return d.toLocaleDateString('en-CA', { timeZone: tz })  // YYYY-MM-DD
+}
+
+export default function FinanceView() {
   const now = new Date()
-  const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
-  const threeMonthsAgo = new Date(now)
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 2)
-  const threeMonthsAgoStr = threeMonthsAgo.getFullYear() + '-' + String(threeMonthsAgo.getMonth() + 1).padStart(2, '0')
+  const [from, setFrom] = useState(toYMD(startOfMonth(now)))
+  const [to, setTo] = useState(toYMD(endOfMonth(now)))
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
-  const [from, setFrom] = useState(threeMonthsAgoStr)
-  const [to, setTo] = useState(thisMonth)
-
-  function setPeriod(type) {
-    if (type === 'this') { setFrom(thisMonth); setTo(thisMonth) }
-    else if (type === 'last3') { setFrom(threeMonthsAgoStr); setTo(thisMonth) }
-    else {
-      const yr = now.getFullYear()
-      setFrom(yr + '-01')
-      setTo(yr + '-12')
+  async function load() {
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await fetch('/api/finance/summary?from=' + from + '&to=' + to)
+      if (!res.ok) {
+        const d = await res.json().catch(function() { return {} })
+        setError(d.error || res.statusText)
+        setLoading(false)
+        return
+      }
+      setData(await res.json())
+    } catch (e) {
+      setError('Network error')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const filteredSittings = sittings.filter(function(s) { return inRange(s.date ? new Date(s.date).toISOString() : '', from, to) })
-  const filteredExpenses = expenses.filter(function(e) { return inRange(e.date ? new Date(e.date).toISOString() : '', from, to) })
-  const filteredFees = feeEntries.filter(function(f) { return inRange(f.createdAt ? new Date(f.createdAt).toISOString() : '', from, to) })
+  useEffect(function() { load() }, [])
 
-  const revenue = filteredSittings.reduce(function(sum, s) { return sum + Number(s.paid || 0) }, 0)
-  const expTotal = filteredExpenses.reduce(function(sum, e) { return sum + Number(e.amount || 0) }, 0)
-  const feesTotal = filteredFees.reduce(function(sum, f) { return sum + Number(f.consultantShare || 0) }, 0)
-  const feesPending = filteredFees.filter(function(f) { return (f.status || 'Pending') === 'Pending' }).reduce(function(sum, f) { return sum + Number(f.consultantShare || 0) }, 0)
-  const profit = revenue - expTotal - feesTotal
-
-  const months = getMonthRange(from, to)
-
-  const monthRevenue = {}
-  const monthExp = {}
-  months.forEach(function(m) { monthRevenue[m] = 0; monthExp[m] = 0 })
-
-  filteredSittings.forEach(function(s) {
-    const m = s.date ? new Date(s.date).toISOString().slice(0, 7) : ''
-    if (monthRevenue[m] !== undefined) monthRevenue[m] += Number(s.paid || 0)
-  })
-  filteredExpenses.forEach(function(e) {
-    const m = e.date ? new Date(e.date).toISOString().slice(0, 7) : ''
-    if (monthExp[m] !== undefined) monthExp[m] += Number(e.amount || 0)
-  })
-
-  const maxVal = Math.max(...months.map(function(m) { return Math.max(monthRevenue[m], monthExp[m]) }), 1)
-
-  const catTotals = {}
-  filteredExpenses.forEach(function(e) {
-    const c = e.category || 'Other'
-    catTotals[c] = (catTotals[c] || 0) + Number(e.amount || 0)
-  })
-
-  const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  function applyPreset(preset) {
+    const n = new Date()
+    if (preset === 'this_month') {
+      setFrom(toYMD(startOfMonth(n)))
+      setTo(toYMD(endOfMonth(n)))
+    } else if (preset === 'last_month') {
+      const lm = new Date(n.getFullYear(), n.getMonth() - 1, 1)
+      setFrom(toYMD(startOfMonth(lm)))
+      setTo(toYMD(endOfMonth(lm)))
+    } else if (preset === 'last_30') {
+      const start = new Date(n.getTime() - 30 * 24 * 60 * 60 * 1000)
+      setFrom(toYMD(start))
+      setTo(toYMD(n))
+    } else if (preset === 'last_90') {
+      const start = new Date(n.getTime() - 90 * 24 * 60 * 60 * 1000)
+      setFrom(toYMD(start))
+      setTo(toYMD(n))
+    } else if (preset === 'this_year') {
+      setFrom(toYMD(new Date(n.getFullYear(), 0, 1)))
+      setTo(toYMD(n))
+    }
+  }
 
   return (
-    <div className="space-y-4">
-
-      {/* Period selector */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+    <div>
+      {/* Date range controls */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-medium text-gray-600">Period:</span>
-          <input
-            type="month"
-            value={from}
-            onChange={function(e) { setFrom(e.target.value) }}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <span className="text-xs text-gray-400">to</span>
-          <input
-            type="month"
-            value={to}
-            onChange={function(e) { setTo(e.target.value) }}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <div className="flex gap-2 ml-auto">
-            {[
-              { label: 'This month', type: 'this' },
-              { label: 'Last 3 months', type: 'last3' },
-              { label: 'This year', type: 'year' },
-            ].map(function(p) {
-              return (
-                <button
-                  key={p.type}
-                  onClick={function() { setPeriod(p.type) }}
-                  className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition"
-                >
-                  {p.label}
-                </button>
-              )
-            })}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">From</label>
+            <input type="date" value={from} onChange={function(e) { setFrom(e.target.value) }}
+              className="h-9 border border-slate-200 rounded-lg px-2 text-sm" />
           </div>
-        </div>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Revenue', value: '₹' + revenue.toLocaleString('en-IN'), color: 'text-teal-700' },
-          { label: 'Expenses', value: '₹' + expTotal.toLocaleString('en-IN'), color: 'text-red-600' },
-          { label: 'Consultant fees', value: '₹' + feesTotal.toLocaleString('en-IN'), sub: feesPending > 0 ? '₹' + feesPending.toLocaleString('en-IN') + ' pending' : 'All paid', color: 'text-amber-600' },
-          { label: 'Net profit', value: '₹' + profit.toLocaleString('en-IN'), color: profit >= 0 ? 'text-teal-700' : 'text-red-600' },
-        ].map(function(stat) {
-          return (
-            <div key={stat.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <p className="text-xs text-gray-400">{stat.label}</p>
-              <p className={'text-lg font-semibold mt-1 ' + stat.color}>{stat.value}</p>
-              {stat.sub && <p className="text-xs text-gray-400 mt-0.5">{stat.sub}</p>}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-2 gap-4">
-
-        {/* Bar chart */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-medium text-gray-700 mb-4">Monthly revenue vs expenses</h3>
-          <div className="flex items-flex-end gap-2" style={{ height: '160px', alignItems: 'flex-end', borderBottom: '1px solid #f3f4f6', paddingBottom: '4px' }}>
-            {months.map(function(m) {
-              const revH = Math.max(4, Math.round(monthRevenue[m] / maxVal * 140))
-              const expH = Math.max(2, Math.round(monthExp[m] / maxVal * 140))
-              const profH = Math.max(2, Math.round(Math.max(0, monthRevenue[m] - monthExp[m]) / maxVal * 140))
-              return (
-                <div key={m} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '148px' }}>
-                    <div style={{ background: '#0f6e56', borderRadius: '3px 3px 0 0', width: '8px', height: revH + 'px' }} title={'Revenue: ₹' + monthRevenue[m]} />
-                    <div style={{ background: '#c0392b', borderRadius: '3px 3px 0 0', width: '8px', height: expH + 'px' }} title={'Expenses: ₹' + monthExp[m]} />
-                    <div style={{ background: '#0d9488', borderRadius: '3px 3px 0 0', width: '8px', height: profH + 'px' }} title={'Profit: ₹' + (monthRevenue[m] - monthExp[m])} />
-                  </div>
-                </div>
-              )
-            })}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">To</label>
+            <input type="date" value={to} onChange={function(e) { setTo(e.target.value) }}
+              className="h-9 border border-slate-200 rounded-lg px-2 text-sm" />
           </div>
-          <div className="flex gap-1 mt-1">
-            {months.map(function(m) {
-              return (
-                <div key={m} style={{ flex: 1, textAlign: 'center', fontSize: '10px', color: '#9ca3af' }}>
-                  {MONTH_LABELS[parseInt(m.split('-')[1]) - 1]}
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex gap-4 mt-3">
-            {[
-              { color: '#0f6e56', label: 'Revenue' },
-              { color: '#c0392b', label: 'Expenses' },
-              { color: '#0d9488', label: 'Profit' },
-            ].map(function(l) {
-              return (
-                <div key={l.label} className="flex items-center gap-1.5">
-                  <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: l.color }} />
-                  <span className="text-xs text-gray-500">{l.label}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Category breakdown */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-medium text-gray-700 mb-4">Expenses by category</h3>
-          {Object.keys(catTotals).length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No expenses in this period</p>
-          ) : (
-            <div className="space-y-3">
-              {Object.entries(catTotals).sort(function(a, b) { return b[1] - a[1] }).map(function(entry) {
-                const cat = entry[0]
-                const amt = entry[1]
-                const pct = Math.round(amt / expTotal * 100)
-                return (
-                  <div key={cat} className="space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-600">{cat}</span>
-                      <span className="text-xs font-medium text-gray-700">₹{amt.toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-1.5">
-                      <div className="bg-red-400 h-1.5 rounded-full" style={{ width: pct + '%' }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Sittings summary */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Period summary</h3>
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: 'Total sittings', value: filteredSittings.length },
-            { label: 'Avg per sitting', value: filteredSittings.length > 0 ? '₹' + Math.round(revenue / filteredSittings.length).toLocaleString('en-IN') : '—' },
-            { label: 'Total expenses', value: filteredExpenses.length },
-            { label: 'Consultant fees pending', value: filteredFees.filter(function(f) { return (f.status || 'Pending') === 'Pending' }).length },
-          ].map(function(stat) {
+          <button onClick={load} disabled={loading}
+            className="text-xs px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium">
+            {loading ? 'Loading…' : 'Apply'}
+          </button>
+          <div className="text-xs text-slate-400 ml-2">Quick:</div>
+          {['this_month', 'last_month', 'last_30', 'last_90', 'this_year'].map(function(p) {
             return (
-              <div key={stat.label} className="text-center border border-gray-100 rounded-xl p-3">
-                <p className="text-xs text-gray-400">{stat.label}</p>
-                <p className="text-lg font-semibold text-gray-900 mt-1">{stat.value}</p>
-              </div>
+              <button key={p} onClick={function() { applyPreset(p) }}
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+                {p.replace(/_/g, ' ')}
+              </button>
             )
           })}
         </div>
+        {error && <div className="text-xs text-red-600 mt-2">{error}</div>}
       </div>
 
+      {data && (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+              <div className="text-xs font-medium text-green-700">Revenue</div>
+              <div className="text-2xl font-semibold text-green-900 mt-0.5">{formatINR(data.summary.revenue)}</div>
+              <div className="text-xs text-green-700 mt-1">{data.summary.receiptCount} receipts</div>
+            </div>
+            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+              <div className="text-xs font-medium text-red-700">Expenses</div>
+              <div className="text-2xl font-semibold text-red-900 mt-0.5">{formatINR(data.summary.expenses)}</div>
+              <div className="text-xs text-red-700 mt-1">{data.summary.expenseCount} entries</div>
+            </div>
+            <div className={'rounded-xl p-4 border ' + (data.summary.net >= 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-amber-50 border-amber-100')}>
+              <div className={'text-xs font-medium ' + (data.summary.net >= 0 ? 'text-indigo-700' : 'text-amber-700')}>Net</div>
+              <div className={'text-2xl font-semibold mt-0.5 ' + (data.summary.net >= 0 ? 'text-indigo-900' : 'text-amber-900')}>
+                {formatINR(data.summary.net)}
+              </div>
+              <div className={'text-xs mt-1 ' + (data.summary.net >= 0 ? 'text-indigo-700' : 'text-amber-700')}>
+                Revenue − Expenses
+              </div>
+            </div>
+          </div>
+
+          {/* Expense breakdown by category */}
+          {Object.keys(data.expByCategory).length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
+              <h2 className="text-sm font-medium text-slate-700 mb-3">Expenses by category</h2>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="text-left py-2 text-xs font-medium text-slate-500 uppercase">Category</th>
+                    <th className="text-right py-2 text-xs font-medium text-slate-500 uppercase">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(data.expByCategory)
+                    .sort(function(a, b) { return b[1] - a[1] })
+                    .map(function(e) {
+                      return (
+                        <tr key={e[0]} className="border-b border-slate-50">
+                          <td className="py-2 text-sm text-slate-700">{e[0]}</td>
+                          <td className="py-2 text-sm text-slate-900 text-right font-medium">{formatINR(e[1])}</td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Detailed lists side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <h2 className="text-sm font-medium text-slate-700 mb-2">Receipts</h2>
+              {data.receipts.length === 0 ? (
+                <p className="text-xs text-slate-400">No receipts in this range.</p>
+              ) : (
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-100 sticky top-0 bg-white">
+                        <th className="text-left py-2 text-[10px] font-medium text-slate-500 uppercase">Date</th>
+                        <th className="text-left py-2 text-[10px] font-medium text-slate-500 uppercase">Mode</th>
+                        <th className="text-right py-2 text-[10px] font-medium text-slate-500 uppercase">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.receipts.map(function(r) {
+                        return (
+                          <tr key={r.id} className="border-b border-slate-50">
+                            <td className="py-2 text-xs text-slate-600">{formatDate(r.date)}</td>
+                            <td className="py-2 text-xs text-slate-600">{r.paymentMode || '—'}</td>
+                            <td className="py-2 text-xs text-slate-900 text-right font-medium">{formatINR(r.amount)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <h2 className="text-sm font-medium text-slate-700 mb-2">Expenses</h2>
+              {data.expenses.length === 0 ? (
+                <p className="text-xs text-slate-400">No expenses in this range.</p>
+              ) : (
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-100 sticky top-0 bg-white">
+                        <th className="text-left py-2 text-[10px] font-medium text-slate-500 uppercase">Date</th>
+                        <th className="text-left py-2 text-[10px] font-medium text-slate-500 uppercase">Category</th>
+                        <th className="text-right py-2 text-[10px] font-medium text-slate-500 uppercase">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.expenses.map(function(e) {
+                        return (
+                          <tr key={e.id} className="border-b border-slate-50">
+                            <td className="py-2 text-xs text-slate-600">{formatDate(e.date)}</td>
+                            <td className="py-2 text-xs text-slate-600">{e.category || '—'}</td>
+                            <td className="py-2 text-xs text-slate-900 text-right font-medium">{formatINR(e.amount)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

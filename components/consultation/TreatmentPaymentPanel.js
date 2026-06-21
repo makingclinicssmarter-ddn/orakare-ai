@@ -21,7 +21,7 @@ export default function TreatmentPaymentPanel({
   useEffect(function() {
     if (!activeTreatments || activeTreatments.length === 0) return
     if (allocations.length > 0) return
-    setAllocations(activeTreatments.map(function(t) { return { treatmentId: t.id, amount: 0, discount: 0 } }))
+    setAllocations(activeTreatments.map(function(t) { return { treatmentId: t.id, amount: '', discount: '' } }))
   }, [activeTreatments])
 
   // Push #3.5 Zip 2.2: removed the per-keystroke auto-fill effect that
@@ -48,20 +48,19 @@ export default function TreatmentPaymentPanel({
     setAllocations(function(curr) {
       const existing = curr.find(function(a) { return a.treatmentId === treatmentId })
       if (existing) {
-        return curr.map(function(a) { return a.treatmentId === treatmentId ? { ...a, amount: Number(amt) } : a })
+        return curr.map(function(a) { return a.treatmentId === treatmentId ? { ...a, amount: amt } : a })
       }
-      return curr.concat({ treatmentId, amount: Number(amt), discount: 0 })
+      return curr.concat({ treatmentId, amount: amt, discount: '' })
     })
   }
 
-  // Push #7: per-row discount input. Adds to Treatment.discount on save.
   function updateAllocDiscount(treatmentId, disc) {
     setAllocations(function(curr) {
       const existing = curr.find(function(a) { return a.treatmentId === treatmentId })
       if (existing) {
-        return curr.map(function(a) { return a.treatmentId === treatmentId ? { ...a, discount: Number(disc) } : a })
+        return curr.map(function(a) { return a.treatmentId === treatmentId ? { ...a, discount: disc } : a })
       }
-      return curr.concat({ treatmentId, amount: 0, discount: Number(disc) })
+      return curr.concat({ treatmentId, amount: '', discount: disc })
     })
   }
 
@@ -81,7 +80,7 @@ export default function TreatmentPaymentPanel({
             <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Amount received</label>
             <input
               type="number" min={0} value={amount}
-              onChange={function(e) { setAmount(Number(e.target.value)); setUnallocated(true) }}
+              onChange={function(e) { setAmount(e.target.value); setUnallocated(true) }}
               placeholder="0"
               className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
@@ -169,7 +168,7 @@ export default function TreatmentPaymentPanel({
         <div className="sm:col-span-2">
           <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Amount received</label>
           <input
-            type="number" min={0} value={amount} onChange={function(e) { setAmount(Number(e.target.value)) }}
+            type="number" min={0} value={amount} onChange={function(e) { setAmount(e.target.value) }}
             placeholder="0"
             className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
           />

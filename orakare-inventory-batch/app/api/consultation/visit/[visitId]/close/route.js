@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDoctorContext, unauthorized, forbidden, notFoundResponse } from '@/lib/auth-helpers'
 import { nextCounter, formatInvoiceNo } from '@/lib/counter'
+import { planFifoDispense } from '@/lib/inventory-fifo'
 
 // POST /api/consultation/visit/[visitId]/close
 //
@@ -71,10 +72,7 @@ export async function POST(req, props) {
   const vc = body.visitCharges || {}
   const vcLines = Array.isArray(vc.lines) ? vc.lines : []
   const vcInvItems = Array.isArray(vc.inventoryItems) ? vc.inventoryItems : []
-  // Push #8: roundOff is a separate finishing adjustment, applied AFTER subtotal.
-  // Can be negative (typical) or positive. Stored as a synthetic line item
-  // with description "Round off" so the printed invoice shows it transparently.
-  const vcRoundOff = Number.isFinite(Number(vc.roundOff)) ? Number(vc.roundOff) : 0
+  const vcTotalDiscount = Number.isFinite(Number(vc.totalDiscount)) ? Number(vc.totalDiscount) : 0
   const vcPayment = vc.payment && Number(vc.payment.amount) > 0 ? vc.payment : null
 
   const tp = body.treatmentPayment
@@ -90,13 +88,12 @@ export async function POST(req, props) {
   const nextApt = body.nextAppointment && body.nextAppointment.date ? body.nextAppointment : null
 
   // ---- Compute visit-charge invoice totals ----
-  // Push #7: accept negative amounts for round-off lines (e.g. "Round off: -23")
   const chargeLines = vcLines
-    .filter(function(c) { return c && c.label && Number.isFinite(Number(c.amount)) && Math.abs(Number(c.amount)) > 0 })
+    .filter(function(c) { return c && c.label && Number(c.amount) > 0 })
     .map(function(c) {
       const gross = Number(c.amount)
       const disc = Number(c.discount) || 0
-      return { description: c.label, quantity: 1, unitPrice: gross, discount: disc, total: gross - disc }
+      return { description: c.label, quantity: 1, unitPrice: gross, discount: disc, total: Math.max(0, gross - disc) }
     })
   const invLines = vcInvItems
     .filter(function(i) { return i && i.inventoryItemId && Number(i.quantity) > 0 })
@@ -115,20 +112,10 @@ export async function POST(req, props) {
         total: Math.max(0, (qty * price) - lineDiscount),
       }
     })
-  const allLinesBase = chargeLines.concat(invLines)
-  // Push #8: if roundOff != 0, add it as a synthetic invoice line so the
-  // printed invoice shows it transparently. Sign preserved as-is.
-  const allLines = vcRoundOff !== 0
-    ? allLinesBase.concat([{
-        description: 'Round off',
-        quantity: 1,
-        unitPrice: vcRoundOff,
-        discount: 0,
-        total: vcRoundOff,
-      }])
-    : allLinesBase
-  // Push #7: total is just sum of line totals (round-off lines can be negative).
-  const vcTotal = Math.max(0, allLines.reduce(function(s, l) { return s + l.total }, 0))
+  const allLines = chargeLines.concat(invLines)
+  const vcSubtotal = allLines.reduce(function(s, l) { return s + (l.quantity * l.unitPrice) }, 0)
+  const vcLineDiscount = allLines.reduce(function(s, l) { return s + l.discount }, 0)
+  const vcTotal = Math.max(0, vcSubtotal - vcLineDiscount - vcTotalDiscount)
   const vcPaid = vcPayment ? Number(vcPayment.amount) : 0
   const vcBalance = vcTotal - vcPaid
 
@@ -137,6 +124,30 @@ export async function POST(req, props) {
   if (allLines.length > 0) {
     const seq = await nextCounter(ctx.clinicId, 'INVOICE')
     invoiceNo = formatInvoiceNo(null, seq)
+  }
+
+  // Push #5: plan FIFO dispense for each inventory line BEFORE the transaction.
+  // For each invLine, load that item's active batches and compute which batches
+  // to draw from. Block the close if any line is short.
+  const fifoPlans = {}  // tempId-like key (inventoryItemId index) → allocations[]
+  for (let idx = 0; idx < invLines.length; idx++) {
+    const line = invLines[idx]
+    const batches = await db.inventoryBatch.findMany({
+      where: {
+        clinicId: ctx.clinicId,
+        inventoryItemId: line.inventoryItemId,
+        status: 'ACTIVE',
+        quantity: { gt: 0 },
+      },
+      select: { id: true, quantity: true, expiryDate: true, receivedDate: true, unitCost: true, status: true },
+    })
+    const plan = planFifoDispense(batches, line.quantity)
+    if (plan.shortBy > 0) {
+      return NextResponse.json({
+        error: 'Not enough stock for inventory item "' + line.description + '". Short by ' + plan.shortBy + '. Restock or remove from this visit.',
+      }, { status: 400 })
+    }
+    fifoPlans[idx] = plan.allocations
   }
 
   try {
@@ -157,12 +168,6 @@ export async function POST(req, props) {
 
       // 2. Visit-charge invoice (kind=VISIT_CHARGES)
       if (allLines.length > 0) {
-        // Push #7: derive subtotal/discount for the Invoice columns.
-        // Subtotal is the sum of pre-discount line amounts.
-        // Discount is the sum of line-level discounts.
-        const subtotalForInvoice = allLines.reduce(function(s, l) { return s + (l.quantity * l.unitPrice) }, 0)
-        const discountForInvoice = allLines.reduce(function(s, l) { return s + (l.discount || 0) }, 0)
-
         const inv = await tx.invoice.create({
           data: {
             clinicId: ctx.clinicId,
@@ -170,8 +175,8 @@ export async function POST(req, props) {
             invoiceNo: invoiceNo,
             kind: 'VISIT_CHARGES',
             date: new Date(),
-            subtotal: subtotalForInvoice,
-            discount: discountForInvoice,
+            subtotal: vcSubtotal,
+            discount: vcLineDiscount + vcTotalDiscount,
             total: vcTotal,
             paid: vcPaid,
             balance: vcBalance,
@@ -183,6 +188,14 @@ export async function POST(req, props) {
         invoiceId = inv.id
 
         for (const line of allLines) {
+          // Find matching FIFO plan for inventory lines (chargeLines have no inventoryItemId)
+          let batchAllocations = []
+          if (line.inventoryItemId) {
+            const invLineIdx = invLines.findIndex(function(il) { return il.inventoryItemId === line.inventoryItemId && il.description === line.description })
+            if (invLineIdx >= 0 && fifoPlans[invLineIdx]) {
+              batchAllocations = fifoPlans[invLineIdx]
+            }
+          }
           await tx.invoiceItem.create({
             data: {
               invoiceId: inv.id,
@@ -190,6 +203,7 @@ export async function POST(req, props) {
               quantity: line.quantity,
               unitPrice: line.unitPrice,
               total: line.total,
+              batchAllocations: batchAllocations,
             },
           })
         }
@@ -211,29 +225,6 @@ export async function POST(req, props) {
       }
 
       // 4. Treatment payment receipt + allocations
-      // Push #7: each allocation may carry a `discount` that ADDS to Treatment.discount.
-      // Process discounts before allocations so the running balance is correct in
-      // any downstream computations. Discount-only rows (amount = 0, discount > 0)
-      // are valid — she's writing off without a payment today.
-
-      // 4a. Apply per-treatment discounts first (additive)
-      const allDiscountRows = tpAllocations.filter(function(a) {
-        return a && a.treatmentId && Number(a.discount) > 0
-      })
-      for (const a of allDiscountRows) {
-        const treatment = await tx.treatment.findFirst({
-          where: { id: a.treatmentId, clinicId: ctx.clinicId, patientId: visit.patientId },
-          select: { id: true, discount: true },
-        })
-        if (!treatment) continue
-        const newDiscount = Number(treatment.discount || 0) + Number(a.discount)
-        await tx.treatment.update({
-          where: { id: treatment.id },
-          data: { discount: newDiscount },
-        })
-      }
-
-      // 4b. Create the Receipt + PaymentAllocations if there's an actual payment.
       if (hasTreatmentPayment) {
         const tpReceipt = await tx.receipt.create({
           data: {
@@ -241,14 +232,15 @@ export async function POST(req, props) {
             patientId: visit.patientId,
             amount: tpAmount,
             paymentMode: tp.mode || 'Cash',
-            notes: tpAllocations.filter(function(a) { return Number(a.amount) > 0 }).length > 0
-              ? 'Treatment payment (' + tpAllocations.filter(function(a) { return Number(a.amount) > 0 }).length + ' treatment' + (tpAllocations.filter(function(a) { return Number(a.amount) > 0 }).length > 1 ? 's' : '') + ')'
+            notes: tpAllocations.length > 0
+              ? 'Treatment payment (' + tpAllocations.length + ' treatment' + (tpAllocations.length > 1 ? 's' : '') + ')'
               : 'Treatment payment — unallocated',
             date: new Date(),
             invoiceId: null,
           },
         })
 
+        // Create PaymentAllocation rows for each allocation
         for (const a of tpAllocations) {
           if (!a.treatmentId || Number(a.amount) <= 0) continue
           await tx.paymentAllocation.create({
@@ -261,12 +253,23 @@ export async function POST(req, props) {
         }
       }
 
-      // 5. Decrement inventory stock
-      for (const i of invLines) {
-        await tx.inventoryItem.update({
-          where: { id: i.inventoryItemId },
-          data: { stockQty: { decrement: i.quantity } },
-        })
+      // 5. Decrement batches per FIFO plan (Push #5)
+      for (let idx = 0; idx < invLines.length; idx++) {
+        const plan = fifoPlans[idx] || []
+        for (const alloc of plan) {
+          // Decrement batch quantity; if it hits 0, mark DEPLETED.
+          const updated = await tx.inventoryBatch.update({
+            where: { id: alloc.batchId },
+            data: { quantity: { decrement: alloc.qty } },
+            select: { quantity: true },
+          })
+          if (updated.quantity <= 0) {
+            await tx.inventoryBatch.update({
+              where: { id: alloc.batchId },
+              data: { status: 'DEPLETED' },
+            })
+          }
+        }
       }
 
       // 6. Treatment lifecycle: PLANNED → IN_PROGRESS for consented items in this visit
