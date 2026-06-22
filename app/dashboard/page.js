@@ -77,7 +77,7 @@ export default async function DashboardPage() {
         treatment: {
           select: {
             id: true, estimate: true, discount: true,
-            paymentAllocations: { select: { amount: true } },
+            allocations: { select: { amount: true } },
           },
         },
       },
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
         treatments: {
           select: {
             estimate: true, discount: true,
-            paymentAllocations: { select: { amount: true } },
+            allocations: { select: { amount: true } },
           },
         },
         invoices: {
@@ -209,7 +209,7 @@ export default async function DashboardPage() {
     let treatmentBal = 0
     p.treatments.forEach(function(t) {
       const est = Math.max(0, Number(t.estimate || 0) - Number(t.discount || 0))
-      const paid = (t.paymentAllocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
+      const paid = (t.allocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
       treatmentBal += Math.max(0, est - paid)
     })
     const invoiceBal = (p.invoices || []).reduce(function(s, i) { return s + Number(i.balance || 0) }, 0)
@@ -228,7 +228,7 @@ export default async function DashboardPage() {
     const name = ti.procedureName || 'Other'
     tCountByName[name] = (tCountByName[name] || 0) + 1
     if (ti.treatment) {
-      const paid = (ti.treatment.paymentAllocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
+      const paid = (ti.treatment.allocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
       tRevenueByName[name] = (tRevenueByName[name] || 0) + paid
     }
   })

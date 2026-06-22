@@ -43,14 +43,14 @@ export async function POST(req, props) {
       discount: true,
       type: true,
       area: true,
-      paymentAllocations: { select: { amount: true } },
+      allocations: { select: { amount: true } },
     },
   })
   if (!treatment) return notFoundResponse()
 
   // Current balance = estimate − existing discount − sum(allocations)
   const netEstimate = Math.max(0, Number(treatment.estimate || 0) - Number(treatment.discount || 0))
-  const alreadyPaid = (treatment.paymentAllocations || []).reduce(function(s, a) {
+  const alreadyPaid = (treatment.allocations || []).reduce(function(s, a) {
     return s + Number(a.amount || 0)
   }, 0)
   const currentBalance = Math.max(0, netEstimate - alreadyPaid)
