@@ -34,7 +34,9 @@ export default function RegisterPatientForm({ onClose }) {
         const data = await res.json()
         router.refresh()
         onClose()
-        router.push('/dashboard/patients/' + data.patient.id)
+        // Push #8: after registering, jump straight to consultation
+        // (Dr. Shobhna's expectation: register → start consult, not register → view empty Records page)
+        router.push('/dashboard/consultation/' + data.patient.id)
       } else {
         alert('Something went wrong. Please try again.')
       }
