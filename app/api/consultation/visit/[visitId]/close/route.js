@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getDoctorContext, unauthorized, forbidden, notFoundResponse } from '@/lib/auth-helpers'
 import { nextCounter, formatInvoiceNo } from '@/lib/counter'
 import { planFifoDispense } from '@/lib/inventory-fifo'
+import { buildFeeEntryRecord } from '@/lib/consultant-fees'
 
 // POST /api/consultation/visit/[visitId]/close
 //
@@ -294,6 +295,25 @@ export async function POST(req, props) {
               amount: Number(a.amount),
             },
           })
+
+          // Push #9: if this treatment has a consultant, accrue their share.
+          // Re-fetch the treatment to get consultant + split info (we have
+          // them by id from the allocation, but not the consultant fields).
+          const tForFee = await tx.treatment.findUnique({
+            where: { id: a.treatmentId },
+            select: { id: true, estimate: true, discount: true, consultantId: true, splitType: true, splitValue: true },
+          })
+          if (tForFee && tForFee.consultantId) {
+            const feeRecord = buildFeeEntryRecord({
+              clinicId: ctx.clinicId,
+              treatment: tForFee,
+              paymentAmount: Number(a.amount),
+              invoiceId: null,
+            })
+            if (feeRecord) {
+              await tx.feeEntry.create({ data: feeRecord })
+            }
+          }
         }
       }
 

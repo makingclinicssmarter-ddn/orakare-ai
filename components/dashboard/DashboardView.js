@@ -67,6 +67,7 @@ export default function DashboardView(props) {
     totalPatients, activeTreatmentsCount, balancePending,
     pieData, treatmentsRevenueData,
     lowStockCount, expiringSoonCount, stockValue,
+    pendingPayoutTotal, pendingPayoutConsultants,
     revenueByMonth, expByMonth, months,
     pendingFees,
   } = props
@@ -129,6 +130,19 @@ export default function DashboardView(props) {
           </div>
         </Link>
       </div>
+
+      {/* Stat cards row 3 — Consultants (Push #9) */}
+      {pendingPayoutTotal > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '1.25rem' }}>
+          <Link href="/dashboard/consultants" style={{ textDecoration: 'none' }}>
+            <div style={{ background: '#FAEEDA', border: '0.5px solid #FAC775', borderRadius: '14px', padding: '14px 16px' }}>
+              <p style={{ fontSize: '11px', color: '#854F0B', fontWeight: 500 }}>👤 Consultant payouts pending</p>
+              <p style={{ fontSize: '22px', fontWeight: 600, color: '#633806', marginTop: 4 }}>{formatINR(pendingPayoutTotal)}</p>
+              <p style={{ fontSize: '11px', color: '#854F0B', marginTop: 2 }}>Across {pendingPayoutConsultants} consultant{pendingPayoutConsultants === 1 ? '' : 's'}</p>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {/* Treatments breakdown — volume + revenue side by side (Push #8 Bug 4) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">

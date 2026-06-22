@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDoctorContext, unauthorized, forbidden, notFoundResponse } from '@/lib/auth-helpers'
+import { buildFeeEntryRecord } from '@/lib/consultant-fees'
 
 // POST /api/treatments/[treatmentId]/record-payment
 // Body: { amount, discount?, mode, note?, date? }
@@ -43,6 +44,9 @@ export async function POST(req, props) {
       discount: true,
       type: true,
       area: true,
+      consultantId: true,
+      splitType: true,
+      splitValue: true,
       allocations: { select: { amount: true } },
     },
   })
@@ -108,6 +112,29 @@ export async function POST(req, props) {
           },
         })
         receiptId = receipt.id
+
+        // Push #9: if treatment has a consultant, accrue their share now.
+        // Note: the discount portion does NOT contribute to consultant share
+        // (consultants don't get a cut of discounts). Only `amount` is shared.
+        // We rebuild the treatment object with the just-applied discount so
+        // the FIXED-split proportional calc uses the up-to-date net estimate.
+        const treatmentForFee = {
+          id: treatment.id,
+          consultantId: treatment.consultantId,
+          splitType: treatment.splitType,
+          splitValue: treatment.splitValue,
+          estimate: treatment.estimate,
+          discount: Number(treatment.discount || 0) + discount,
+        }
+        const feeRecord = buildFeeEntryRecord({
+          clinicId: ctx.clinicId,
+          treatment: treatmentForFee,
+          paymentAmount: amount,
+          invoiceId: null,
+        })
+        if (feeRecord) {
+          await tx.feeEntry.create({ data: feeRecord })
+        }
       }
 
       return { receiptId, newBalance: Math.max(0, currentBalance - amount - discount) }

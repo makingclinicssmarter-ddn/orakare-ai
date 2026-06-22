@@ -9,6 +9,7 @@ import UnallocatedBanner from '@/components/patients/UnallocatedBanner'
 import RecordPaymentButton from '@/components/invoice/RecordPaymentButton'
 import RecordTreatmentPaymentButton from '@/components/treatments/RecordTreatmentPaymentButton'
 import EditEstimateButton from '@/components/treatments/EditEstimateButton'
+import EditConsultantButton from '@/components/treatments/EditConsultantButton'
 import { computePatientFinances } from '@/lib/finance'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -404,8 +405,29 @@ export default async function PatientRecordsPage(props) {
                       <div className="text-xs text-slate-500 mt-1">
                         {t.startedAt ? 'Started ' + formatDate(t.startedAt) : 'Not started'}
                         {t.completedAt ? ' · Completed ' + formatDate(t.completedAt) : ''}
-                        {t.consultant?.name ? ' · Dr. ' + t.consultant.name : ''}
                         {' · '}{sittings.length}/{expectedSittings} sittings
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500">
+                        {t.consultant?.name ? (
+                          <>
+                            <span>👤 {t.consultant.name}</span>
+                            {t.splitType === 'PERCENTAGE' && t.splitValue ? <span className="text-slate-400">· {t.splitValue}%</span> : null}
+                            {t.splitType === 'FIXED' && t.splitValue ? <span className="text-slate-400">· {formatINR(t.splitValue)} flat</span> : null}
+                          </>
+                        ) : (
+                          <span className="text-slate-400">No consultant</span>
+                        )}
+                        {t.status !== 'CANCELLED' && (
+                          <EditConsultantButton
+                            treatment={{
+                              id: t.id,
+                              consultantId: t.consultantId,
+                              splitType: t.splitType,
+                              splitValue: t.splitValue,
+                            }}
+                            estimate={netEstimate}
+                          />
+                        )}
                       </div>
                       {t.notes && (
                         <div className="text-xs text-slate-600 mt-1 italic">{t.notes}</div>

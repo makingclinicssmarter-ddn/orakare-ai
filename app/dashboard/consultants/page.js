@@ -1,34 +1,15 @@
-import { db } from '@/lib/db'
-import { auth } from '@clerk/nextjs/server'
-import ConsultantsView from '@/components/consultants/ConsultantsView'
+import ConsultantsListView from '@/components/consultants/ConsultantsListView'
 
-export default async function ConsultantsPage() {
-  const { userId } = await auth()
+export const dynamic = 'force-dynamic'
 
-  const doctor = await db.doctor.findFirst({
-    where: { clerkId: userId },
-  })
-
-  const consultants = doctor ? await db.consultant.findMany({
-    where: { clinicId: doctor.clinicId },
-    orderBy: { name: 'asc' },
-  }) : []
-
-  const feeEntries = doctor ? await db.feeEntry.findMany({
-    where: { clinicId: doctor.clinicId },
-    orderBy: { createdAt: 'desc' },
-    include: { consultant: true },
-  }) : []
-
+export default function ConsultantsPage() {
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Consultants</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          Visiting doctors and revenue sharing
-        </p>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="mb-5">
+        <h1 className="text-xl font-semibold text-slate-900">Consultants</h1>
+        <p className="text-sm text-slate-500 mt-0.5">On-call specialists and their pending payouts.</p>
       </div>
-      <ConsultantsView consultants={consultants} feeEntries={feeEntries} />
+      <ConsultantsListView />
     </div>
   )
 }

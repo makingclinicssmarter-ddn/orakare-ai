@@ -257,6 +257,12 @@ export default async function DashboardPage() {
     })
   })
 
+  // Push #9: aggregate pending consultant payouts for the KPI card
+  const pendingPayoutTotal = (pendingFees || []).reduce(function(s, f) {
+    return s + Number(f.consultantShare || 0)
+  }, 0)
+  const pendingPayoutConsultants = new Set((pendingFees || []).map(function(f) { return f.consultantId })).size
+
   return (
     <DashboardView
       doctorName={doctor.name}
@@ -272,6 +278,8 @@ export default async function DashboardPage() {
       lowStockCount={lowStockCount}
       expiringSoonCount={expiringSoonCount}
       stockValue={stockValue}
+      pendingPayoutTotal={pendingPayoutTotal}
+      pendingPayoutConsultants={pendingPayoutConsultants}
       revenueByMonth={revenueByMonth}
       expByMonth={expByMonth}
       months={months}

@@ -42,6 +42,9 @@ export async function GET(_req, props) {
 // Balance recomputes automatically from estimate − discount − allocations
 // (we don't store balance; it's derived).
 
+// Push #9: extended to accept consultant assignment (consultantId, splitType, splitValue).
+// consultantId of '' (empty string) or null detaches the consultant.
+
 const EDITABLE_FIELDS = ['estimate', 'discount']
 
 export async function PATCH(req, props) {
@@ -67,6 +70,33 @@ export async function PATCH(req, props) {
       if (Number.isFinite(n) && n >= 0) updates[field] = n
     }
   })
+
+  // Push #9: consultant assignment
+  if (body.consultantId !== undefined) {
+    if (body.consultantId === null || body.consultantId === '') {
+      // Detach consultant
+      updates.consultantId = null
+      updates.splitType = null
+      updates.splitValue = null
+    } else {
+      // Verify consultant belongs to this clinic before attaching
+      const consultant = await db.consultant.findFirst({
+        where: { id: body.consultantId, clinicId: ctx.clinicId },
+        select: { id: true },
+      })
+      if (!consultant) {
+        return NextResponse.json({ error: 'Consultant not found' }, { status: 400 })
+      }
+      updates.consultantId = body.consultantId
+      if (body.splitType === 'PERCENTAGE' || body.splitType === 'FIXED') {
+        updates.splitType = body.splitType
+      }
+      if (body.splitValue !== undefined) {
+        const sv = Number(body.splitValue)
+        if (Number.isFinite(sv) && sv >= 0) updates.splitValue = sv
+      }
+    }
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No editable fields provided' }, { status: 400 })
