@@ -518,11 +518,11 @@ export default function PatientsPage({ doctor, recentPatients, activeCount, arch
           <div className="flex gap-3 justify-center">
             <button
               onClick={function() {
-                router.push('/dashboard/patients/' + registered.id)
+                router.push('/dashboard/consultation/' + registered.id)
               }}
               className="bg-primary-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-800 transition"
             >
-              View patient
+              Start consultation
             </button>
             <button
               onClick={function() { setRegistered(null) }}
