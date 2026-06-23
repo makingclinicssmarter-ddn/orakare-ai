@@ -22,6 +22,32 @@ export default function ConsultantDetailView({ consultantId }) {
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showPayout, setShowPayout] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillMsg, setBackfillMsg] = useState(null)
+
+  async function handleBackfill() {
+    if (!confirm('Backfill fee entries for past payments? This scans all treatments where ' + (c?.name || 'this consultant') + ' is currently attached and creates fee entries for any payments that pre-date the attachment.')) return
+    setBackfilling(true)
+    setBackfillMsg(null)
+    try {
+      const res = await fetch('/api/consultants/' + consultantId + '/backfill', { method: 'POST' })
+      const data = await res.json().catch(function() { return {} })
+      if (res.ok) {
+        if (data.backfilledCount === 0) {
+          setBackfillMsg('Nothing to backfill — all past payments are already accounted for.')
+        } else {
+          setBackfillMsg('Backfilled ' + data.backfilledCount + ' treatment(s). Total accrued: ₹' + Math.round(data.totalAccrued).toLocaleString('en-IN') + '. Refreshing…')
+          setTimeout(function() { load(); setBackfillMsg(null) }, 1500)
+        }
+      } else {
+        setBackfillMsg('Failed: ' + (data.error || res.statusText))
+      }
+    } catch (e) {
+      setBackfillMsg('Network error')
+    } finally {
+      setBackfilling(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -65,6 +91,11 @@ export default function ConsultantDetailView({ consultantId }) {
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={handleBackfill} disabled={backfilling}
+            className="text-sm px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            title="Create fee entries for payments that pre-date the consultant attachment">
+            {backfilling ? 'Backfilling…' : 'Backfill past fees'}
+          </button>
           <a href={'/api/consultants/' + c.id + '/statement'} target="_blank" rel="noopener noreferrer"
             className="text-sm px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
             Print statement
@@ -85,6 +116,12 @@ export default function ConsultantDetailView({ consultantId }) {
           )}
         </div>
       </div>
+
+      {backfillMsg && (
+        <div className="mb-4 bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-blue-800">
+          {backfillMsg}
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3 mb-6">
