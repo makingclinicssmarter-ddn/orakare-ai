@@ -44,7 +44,7 @@ export default async function ConsultationEntryPage(props) {
     where: {
       patientId,
       clinicId: doctor.clinicId,
-      status: { notIn: ['COMPLETED', 'TREATED_COMPLETE', 'ADVISED_COMPLETE', 'CONSENTED_COMPLETE'] },
+      status: { not: 'COMPLETED' },
     },
     include: {
       treatmentPlan: {
