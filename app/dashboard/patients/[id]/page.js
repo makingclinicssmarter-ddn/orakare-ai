@@ -464,7 +464,7 @@ export default async function PatientRecordsPage(props) {
                             <div className="flex items-start justify-between gap-3 flex-wrap">
                               <div className="flex-1 min-w-0">
                                 <div className="text-xs font-medium text-slate-700">
-                                  Sitting {idx + 1} · {formatDateTime(s.date)}
+                                  Sitting {idx + 1} · {formatDate(s.date)}
                                 </div>
                                 {(s.description || s.notes) && (
                                   <div className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">

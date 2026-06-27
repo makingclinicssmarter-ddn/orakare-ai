@@ -25,6 +25,18 @@ export default async function Page() {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        // Push #11: fetch treatments with their allocations so the PatientRow
+        // can derive a useful "treatment state" pill instead of the misleading
+        // "Completed" pill (which was just showing the last visit's status).
+        treatments: {
+          select: {
+            id: true,
+            status: true,
+            estimate: true,
+            discount: true,
+            allocations: { select: { amount: true } },
+          },
+        },
       },
     }),
   ])

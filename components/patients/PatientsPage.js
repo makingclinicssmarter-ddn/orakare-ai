@@ -374,18 +374,35 @@ function RegisterForm({ doctor, onSuccess }) {
   )
 }
 
+// Push #11: derive a meaningful treatment-state pill from treatments,
+// replacing the misleading visit-status pill that always showed "Completed".
+// Priority order: Has dues > Active > Settled > No treatments.
+function deriveTreatmentState(treatments) {
+  if (!treatments || treatments.length === 0) {
+    return { label: 'No treatments', tone: 'bg-slate-100 text-slate-500' }
+  }
+  let totalBalance = 0
+  let hasActive = false
+  let hasCompleted = false
+  treatments.forEach(function(t) {
+    const est = Math.max(0, Number(t.estimate || 0) - Number(t.discount || 0))
+    const paid = (t.allocations || []).reduce(function(s, a) { return s + Number(a.amount || 0) }, 0)
+    totalBalance += Math.max(0, est - paid)
+    if (t.status === 'IN_PROGRESS' || t.status === 'PLANNED') hasActive = true
+    if (t.status === 'COMPLETED') hasCompleted = true
+  })
+  if (totalBalance > 0.5) return { label: 'Has dues', tone: 'bg-amber-50 text-amber-800' }
+  if (hasActive) return { label: 'Active', tone: 'bg-blue-50 text-blue-700' }
+  if (hasCompleted) return { label: 'Settled', tone: 'bg-green-50 text-green-700' }
+  return { label: 'No treatments', tone: 'bg-slate-100 text-slate-500' }
+}
+
 function PatientRow({ patient }) {
   const router = useRouter()
   const lastVisit = patient.visits?.[0]
   const isArchived = !!patient.archivedAt
-  const statusColors = {
-    REGISTERED: 'bg-slate-100 text-slate-600',
-    HISTORY_TAKEN: 'bg-blue-50 text-blue-700',
-    EXAMINATION_DONE: 'bg-amber-50 text-amber-700',
-    TREATMENT_PLANNED: 'bg-purple-50 text-purple-700',
-    TREATMENT_CONSENT_SIGNED: 'bg-teal-50 text-teal-700',
-    COMPLETED: 'bg-green-50 text-green-700',
-  }
+  // Push #11: derive treatment state from treatments[]
+  const treatmentState = deriveTreatmentState(patient.treatments)
 
   // Push #3.5: Row clicks navigate to Records page. New consultations are
   // started ONLY from the Consultation tab in the sidebar — removing
@@ -424,13 +441,12 @@ function PatientRow({ patient }) {
       <td className="py-3 px-4 text-sm text-slate-600">{patient.age}y · {patient.gender}</td>
       <td className="py-3 px-4 text-sm text-slate-600">{patient.mobile}</td>
       <td className="py-3 px-4">
-        {lastVisit ? (
-          <span className={'text-xs px-2 py-1 rounded-full font-medium ' + (statusColors[lastVisit.status] || statusColors.REGISTERED)}>
-            {lastVisit.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase() })}
-          </span>
-        ) : (
-          <span className="text-xs text-slate-300">No visits</span>
-        )}
+        {/* Push #11: show derived treatment state instead of last visit status.
+            Old version showed "Completed" for everyone whose last visit was closed,
+            which was technically correct but useless. */}
+        <span className={'text-xs px-2 py-1 rounded-full font-medium ' + treatmentState.tone}>
+          {treatmentState.label}
+        </span>
       </td>
       <td className="py-3 px-4 text-xs text-slate-400">
         {lastVisit
