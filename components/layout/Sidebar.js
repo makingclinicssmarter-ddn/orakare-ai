@@ -17,6 +17,7 @@ const NAV = [
   {
     section: 'Management',
     items: [
+      { label: 'Counter sale', href: '/dashboard/counter-sale', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
       { label: 'Finance', href: '/dashboard/finance', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
       { label: 'Inventory', href: '/dashboard/inventory', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
       { label: 'Consultants', href: '/dashboard/consultants', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
@@ -41,13 +42,11 @@ export default function Sidebar() {
 
   return (
     <div className="w-[220px] min-w-[220px] h-screen flex flex-col bg-primary-700 sticky top-0 print:hidden">
-      {/* Brand */}
       <div className="px-4 py-5 border-b border-white/10">
         <div className="text-primary-50 font-medium text-base tracking-tight">OraKare AI</div>
         <div className="text-white/40 text-xs mt-0.5">Dr. Shobhna Bansal</div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 py-3 overflow-y-auto">
         {NAV.map(function(group) {
           return (
@@ -80,7 +79,6 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
       <div className="px-4 py-3 border-t border-white/10 text-[11px] text-white/30">
         OraKare AI · v2.0
       </div>

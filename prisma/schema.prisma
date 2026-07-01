@@ -474,6 +474,7 @@ model Invoice {
 enum InvoiceKind {
   VISIT_CHARGES
   TREATMENT
+  OTC_SALE
 }
 
 model InvoiceItem {
