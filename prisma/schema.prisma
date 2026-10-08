@@ -440,7 +440,7 @@ model Sitting {
 model Invoice {
   id          String        @id @default(cuid())
   clinicId    String
-  patientId   String
+  patientId   String?
   invoiceNo   String        @unique
   date        DateTime      @default(now())
   subtotal    Float         @default(0)
@@ -461,7 +461,7 @@ model Invoice {
   updatedAt   DateTime      @updatedAt
 
   clinic     Clinic        @relation(fields: [clinicId], references: [id])
-  patient    Patient       @relation(fields: [patientId], references: [id])
+  patient    Patient?       @relation(fields: [patientId], references: [id])
   items      InvoiceItem[]
   feeEntries FeeEntry[]
   receipts   Receipt[]
@@ -509,7 +509,7 @@ enum InvoiceStatus {
 model Receipt {
   id          String   @id @default(cuid())
   clinicId    String
-  patientId   String
+  patientId   String?
   invoiceId   String?
   amount      Float
   date        DateTime @default(now())
@@ -518,7 +518,7 @@ model Receipt {
   createdAt   DateTime @default(now())
 
   clinic      Clinic               @relation(fields: [clinicId], references: [id])
-  patient     Patient              @relation(fields: [patientId], references: [id])
+  patient     Patient?              @relation(fields: [patientId], references: [id])
   invoice     Invoice?             @relation(fields: [invoiceId], references: [id])
   allocations PaymentAllocation[]
 
