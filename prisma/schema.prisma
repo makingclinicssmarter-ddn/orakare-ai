@@ -21,6 +21,7 @@ regNo            String?
 gstNo            String?
 googleReviewUrl  String?
 invoicePrefix    String?  @default("OKR")
+logoUrl          String?  // base64 data URL or external https URL
 
   // Push #3: charge presets for Close-visit screen.
   // Format: [{ id, label, category, amount, active }]

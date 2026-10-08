@@ -20,8 +20,8 @@ export async function GET(request, { params }) {
   }
 
   const [clinic, doctor] = await Promise.all([
-    db.clinic.findUnique({ where: { id: clinicId } }),
-    db.doctor.findFirst({ where: { clinicId } }),
+    db.clinic.findUnique({ where: { id: clinicId }, select: { name: true, address: true, phone: true, email: true, gstNo: true, qualification: true, regNo: true, logoUrl: true } }),
+    db.doctor.findFirst({ where: { clinicId }, select: { name: true } }),
   ])
 
   const doctorName = doctor?.name && doctor.name !== 'Doctor' ? doctor.name : 'Dr. Shobhna Bansal'
@@ -85,13 +85,16 @@ export async function GET(request, { params }) {
   <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
   <div class="page">
     <div class="header">
-      <div>
-        <div class="clinic-name">${clinic?.name || 'Orakare Dental Clinic'}</div>
-        <div class="clinic-detail">
-          ${clinic?.address ? clinic.address + '<br/>' : ''}
-          ${clinic?.phone ? 'Phone: ' + clinic.phone + '<br/>' : ''}
-          ${clinic?.email ? 'Email: ' + clinic.email + '<br/>' : ''}
-          ${clinic?.gstNo ? 'GST: ' + clinic.gstNo : ''}
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        ${clinic?.logoUrl ? '<img src="' + clinic.logoUrl + '" alt="logo" style="width:56px;height:56px;object-fit:contain;border-radius:6px;flex-shrink:0"/>' : ''}
+        <div>
+          <div class="clinic-name">${clinic?.name || 'Orakare Dental Clinic'}</div>
+          <div class="clinic-detail">
+            ${clinic?.address ? clinic.address + '<br/>' : ''}
+            ${clinic?.phone ? 'Phone: ' + clinic.phone + '<br/>' : ''}
+            ${clinic?.email ? 'Email: ' + clinic.email + '<br/>' : ''}
+            ${clinic?.gstNo ? 'GST: ' + clinic.gstNo : ''}
+          </div>
         </div>
       </div>
       <div>

@@ -30,6 +30,7 @@ export async function POST(request) {
         regNo: body.regNo || null,
         googleReviewUrl: body.googleReviewUrl || null,
         invoicePrefix: body.invoicePrefix || 'OKR',
+        logoUrl: body.logoUrl !== undefined ? (body.logoUrl || null) : undefined,
       }
     })
 
